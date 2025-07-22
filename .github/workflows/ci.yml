@@ -11,9 +11,8 @@ env:
   UV_VERSION: "0.3.0"
 
 jobs:
-  # Code Quality Checks
-  lint:
-    name: Lint and Format
+  quality:
+    name: Code Quality
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -40,42 +39,28 @@ jobs:
             ${{ runner.os }}-uv-
 
       - name: Install dependencies
-        run: |
-          uv sync --extra dev
+        run: uv sync --extra dev
 
       - name: Run Ruff linter
-        run: |
-          uv run ruff check src/ tests/
+        run: uv run ruff check src/ tests/
 
       - name: Run Ruff formatter check
-        run: |
-          uv run ruff format --check src/ tests/
+        run: uv run ruff format --check src/ tests/
 
       - name: Run MyPy type checking
-        run: |
-          uv run mypy src/
+        run: uv run mypy src/
 
-      - name: Run Bandit security checks
-        run: |
-          uv run bandit -r src/ -f json -o bandit-report.json || true
-          uv run bandit -r src/
-
-  # Test Suite
   test:
-    name: Test Suite
+    name: Tests
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.12"]
-        os: [ubuntu-latest]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
         uses: actions/setup-python@v4
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v1
@@ -93,22 +78,17 @@ jobs:
             ${{ runner.os }}-uv-
 
       - name: Install dependencies
-        run: |
-          uv sync --extra dev
+        run: uv sync --extra dev
 
       - name: Run tests with coverage
-        run: |
-          uv run pytest --cov=src/opsbox --cov-report=xml --cov-report=term-missing
+        run: uv run pytest --cov=src/opsbox --cov-report=xml --cov-report=term-missing
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
         with:
           file: ./coverage.xml
-          flags: unittests
-          name: codecov-umbrella
           fail_ci_if_error: false
 
-  # Security Scan
   security:
     name: Security Scan
     runs-on: ubuntu-latest
@@ -137,24 +117,9 @@ jobs:
             ${{ runner.os }}-uv-
 
       - name: Install dependencies
-        run: |
-          uv sync --extra dev
+        run: uv sync --extra dev
 
-      - name: Run Bandit security scan
+      - name: Run security scans
         run: |
-          uv run bandit -r src/ -f json -o bandit-report.json
           uv run bandit -r src/
-
-      - name: Run dependency vulnerability scan
-        run: |
-          uv run pip-audit --format json --output pip-audit-report.json || true
           uv run pip-audit
-
-      - name: Upload security reports
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: security-reports-${{ github.run_number }}
-          path: |
-            bandit-report.json
-            pip-audit-report.json

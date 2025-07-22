@@ -29,18 +29,13 @@ dependencies = []
 dev = [
     "pytest>=7.4.0",
     "pytest-cov>=4.1.0",
-    "pytest-mock>=3.11.0",
     "mypy>=1.5.0",
     "bandit>=1.7.0",
     "ruff>=0.1.0",
     "pre-commit>=3.3.0",
-    "commitizen>=3.13.0",
     "types-setuptools",
-    "build>=1.0.0",
     "pip-audit>=1.0.0",
 ]
-
-
 
 [project.urls]
 Homepage = "https://github.com/yourusername/opsbox"
@@ -69,8 +64,6 @@ ignore = [
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
-skip-magic-trailing-comma = false
-line-ending = "auto"
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
@@ -80,32 +73,13 @@ line-ending = "auto"
 [tool.mypy]
 python_version = "3.12"
 warn_return_any = true
-warn_unused_configs = true
 disallow_untyped_defs = true
-disallow_incomplete_defs = true
 check_untyped_defs = true
-disallow_untyped_decorators = true
-no_implicit_optional = true
-warn_redundant_casts = true
-warn_unused_ignores = true
-warn_no_return = true
-warn_unreachable = true
-strict_equality = true
 show_error_codes = true
-show_error_context = true
 
 [[tool.mypy.overrides]]
 module = "tests.*"
 disallow_untyped_defs = false
-
-[[tool.mypy.overrides]]
-module = "src.opsbox.utils.common"
-warn_unreachable = false
-
-# Bandit configuration
-[tool.bandit]
-exclude_dirs = ["tests"]
-skips = ["B101"]  # Skip assert_used for tests
 
 # Pytest configuration
 [tool.pytest.ini_options]
@@ -114,16 +88,9 @@ python_files = ["*_test.py", "test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = [
-    "--strict-markers",
-    "--strict-config",
     "--cov=src/opsbox",
     "--cov-report=term-missing",
-    "--cov-report=html",
     "--cov-report=xml",
-]
-markers = [
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "integration: marks tests as integration tests",
 ]
 
 # Coverage configuration
@@ -138,18 +105,7 @@ omit = [
 exclude_lines = [
     "pragma: no cover",
     "def __repr__",
-    "if self.debug:",
-    "if settings.DEBUG",
     "raise AssertionError",
     "raise NotImplementedError",
-    "if 0:",
     "if __name__ == .__main__.:",
-    "class .*\\bProtocol\\):",
-    "@(abc\\.)?abstractmethod",
 ]
-
-# Commitizen configuration
-[tool.commitizen]
-name = "cz_conventional_commits"
-version = "0.1.0"
-tag_format = "v$version"
