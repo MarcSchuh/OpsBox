@@ -38,10 +38,10 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/opsbox"
-Repository = "https://github.com/yourusername/opsbox"
+Homepage = "https://github.com/MarcSchuh/OpsBox"
+Repository = "https://github.com/MarcSchuh/OpsBox"
 Documentation = "https://opsbox.readthedocs.io"
-"Bug Tracker" = "https://github.com/yourusername/opsbox/issues"
+"Bug Tracker" = "https://github.com/MarcSchuh/OpsBox/issues"
 
 [project.scripts]
 opsbox = "opsbox.main:main"

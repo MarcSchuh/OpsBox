@@ -89,13 +89,24 @@ encrypted = mailer.encrypt_message("Hello, world!")
 
 ```python
 # Import and use OpsBox modules
-from opsbox.utils.common import get_system_info
-from opsbox.backup.scripts import create_backup
-from opsbox.mail.encryption import encrypt_message
+from pathlib import Path
+from opsbox.utils import get_system_info, validate_path
+from opsbox.backup import BackupManager
+from opsbox.mail import EncryptedMailer
 
 # Use the functionality
 system_info = get_system_info()
 print(f"Running on: {system_info['platform']}")
+
+# Validate a path
+is_valid = validate_path(Path("/path/to/file"))
+print(f"Path is valid: {is_valid}")
+
+# Create backup manager
+backup_mgr = BackupManager("/path/to/backups")
+
+# Set up encrypted mailer
+mailer = EncryptedMailer("/path/to/key.pem")
 ```
 
 ## Development Setup
@@ -180,16 +191,16 @@ The CI pipeline runs on every push and pull request to `main` and `develop` bran
 - **Code Quality Checks**: Linting, formatting, and type checking
 - **Test Suite**: Unit tests with coverage reporting
 - **Security Scanning**: Automated security vulnerability detection (Bandit + pip-audit)
-- **Build Verification**: Ensures the package can be built successfully
+- **CodeQL Analysis**: Advanced security analysis for vulnerability detection
 
 ### Required Status Checks
 
 Before any merge to protected branches, the following checks must pass:
 
-- ✅ **Lint and Format** (`lint`)
+- ✅ **Lint and Format** (`quality`)
 - ✅ **Test Suite** (`test`) - Python 3.12
 - ✅ **Security Scan** (`security`)
-- ✅ **Build Check** (`build`)
+- ✅ **CodeQL Analysis** (`CodeQL`)
 
 ### Branch Protection
 
@@ -199,8 +210,6 @@ The repository enforces branch protection rules that require:
 2. **Status Checks**: All CI checks must pass
 3. **Up-to-date Branches**: Branches must be up to date before merging
 4. **Code Owner Review**: Automatic review requests for code owners
-
-For detailed setup instructions, see [`.github/BRANCH_PROTECTION.md`](.github/BRANCH_PROTECTION.md).
 
 ## Code Quality
 
