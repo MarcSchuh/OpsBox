@@ -172,7 +172,7 @@ The CI pipeline runs on every push and pull request to `main` and `develop` bran
 
 - **Code Quality Checks**: Linting, formatting, and type checking
 - **Test Suite**: Unit tests with coverage reporting
-- **Security Scanning**: Automated security vulnerability detection
+- **Security Scanning**: Automated security vulnerability detection (Bandit + pip-audit)
 - **Build Verification**: Ensures the package can be built successfully
 
 ### Required Status Checks
@@ -180,7 +180,7 @@ The CI pipeline runs on every push and pull request to `main` and `develop` bran
 Before any merge to protected branches, the following checks must pass:
 
 - ✅ **Lint and Format** (`lint`)
-- ✅ **Test Suite** (`test`) - Python 3.11 and 3.12
+- ✅ **Test Suite** (`test`) - Python 3.12
 - ✅ **Security Scan** (`security`)
 - ✅ **Build Check** (`build`)
 

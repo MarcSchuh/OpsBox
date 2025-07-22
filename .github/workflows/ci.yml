@@ -145,9 +145,59 @@ jobs:
           uv run bandit -r src/ -f json -o bandit-report.json
           uv run bandit -r src/
 
-      - name: Upload Bandit results
+      - name: Run dependency vulnerability scan
+        run: |
+          uv run pip-audit --format json --output pip-audit-report.json || true
+          uv run pip-audit
+
+      - name: Upload security reports
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: bandit-report-${{ github.run_number }}
-          path: bandit-report.json
+          name: security-reports-${{ github.run_number }}
+          path: |
+            bandit-report.json
+            pip-audit-report.json
+
+  # Build Check
+  build:
+    name: Build Check
+    runs-on: ubuntu-latest
+    needs: [lint, test, security]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v1
+        with:
+          version: ${{ env.UV_VERSION }}
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            .venv
+            .uv/cache
+          key: ${{ runner.os }}-uv-${{ hashFiles('**/uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-
+
+      - name: Install dependencies
+        run: |
+          uv sync --extra dev
+
+      - name: Build package
+        run: |
+          uv run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ github.run_number }}
+          path: dist/

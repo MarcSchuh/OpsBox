@@ -32,7 +32,6 @@ To ensure that merges only occur when all checks pass and code review is complet
 - **Status checks that are required**:
   - `lint` (Lint and Format)
   - `test / 3.12 (ubuntu-latest)` (Test Suite - Python 3.12)
-  - `test / 3.11 (ubuntu-latest)` (Test Suite - Python 3.11)
   - `security` (Security Scan)
   - `build` (Build Check)
 

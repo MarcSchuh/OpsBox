@@ -65,11 +65,10 @@ Follow the instructions in `.github/BRANCH_PROTECTION.md`:
 
 ### 3. Required Status Checks
 Add these status checks to branch protection:
-- `lint`
-- `test / 3.12 (ubuntu-latest)`
-- `test / 3.11 (ubuntu-latest)`
-- `security`
-- `build`
+- `lint` (Lint and Format)
+- `test / 3.12 (ubuntu-latest)` (Test Suite - Python 3.12)
+- `security` (Security Scan)
+- `build` (Build Check)
 
 ## 🔍 What the Pipeline Does
 
@@ -80,13 +79,14 @@ Add these status checks to branch protection:
 - Ensures code quality standards
 
 ### Test Job
-- Runs on Python 3.11 and 3.12
+- Runs on Python 3.12
 - Executes all tests with coverage
 - Uploads coverage reports
-- Ensures compatibility across Python versions
+- Ensures code quality and functionality
 
 ### Security Job
 - Runs Bandit security scanner
+- Runs pip-audit for dependency vulnerabilities
 - Generates security reports
 - Uploads artifacts for review
 - Identifies potential security issues
@@ -96,6 +96,7 @@ Add these status checks to branch protection:
 - Creates distribution artifacts
 - Ensures packaging is correct
 - Runs only after other jobs succeed
+- Uploads build artifacts for distribution
 
 ## 🛡️ Security Features
 

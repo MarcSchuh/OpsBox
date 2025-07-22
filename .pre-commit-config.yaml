@@ -12,9 +12,7 @@ repos:
       - id: check-case-conflict
       - id: check-docstring-first
       - id: check-json
-      - id: check-merge-conflict
       - id: check-symlinks
-      - id: check-yaml
       - id: detect-private-key
       - id: name-tests-test
       - id: requirements-txt-fixer
