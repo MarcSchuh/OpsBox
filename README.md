@@ -162,6 +162,39 @@ This script will:
    uv run pytest
    ```
 
+## CI/CD Pipeline
+
+This project uses GitHub Actions for continuous integration and deployment. The pipeline ensures code quality, security, and reliability through automated checks.
+
+### Pipeline Overview
+
+The CI pipeline runs on every push and pull request to `main` and `develop` branches and includes:
+
+- **Code Quality Checks**: Linting, formatting, and type checking
+- **Test Suite**: Unit tests with coverage reporting
+- **Security Scanning**: Automated security vulnerability detection
+- **Build Verification**: Ensures the package can be built successfully
+
+### Required Status Checks
+
+Before any merge to protected branches, the following checks must pass:
+
+- ✅ **Lint and Format** (`lint`)
+- ✅ **Test Suite** (`test`) - Python 3.11 and 3.12
+- ✅ **Security Scan** (`security`)
+- ✅ **Build Check** (`build`)
+
+### Branch Protection
+
+The repository enforces branch protection rules that require:
+
+1. **Pull Request Reviews**: At least one approval required
+2. **Status Checks**: All CI checks must pass
+3. **Up-to-date Branches**: Branches must be up to date before merging
+4. **Code Owner Review**: Automatic review requests for code owners
+
+For detailed setup instructions, see [`.github/BRANCH_PROTECTION.md`](.github/BRANCH_PROTECTION.md).
+
 ## Code Quality
 
 This project uses several tools to maintain code quality:
