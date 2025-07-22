@@ -1,0 +1,8 @@
+# Global code owners - these users will be requested for review on any change
+* @MarcSchuh
+
+# Additional reviewers for specific areas (optional - only if you want different/additional reviewers)
+# *.py @python-team
+# .github/ @devops-team
+# docs/ @documentation-team
+# tests/ @qa-team

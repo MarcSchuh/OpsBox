@@ -1,0 +1,111 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "opsbox"
+version = "0.1.0"
+description = "A comprehensive Python library for server operations including backup scripts, encrypted mail functionality, and utility tools"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.12"
+authors = [
+    {name = "OpsBox Team", email = "opsbox@example.com"},
+]
+keywords = ["server", "operations", "backup", "encryption", "mail", "utilities"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Systems Administration",
+    "Topic :: Utilities",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "mypy>=1.5.0",
+    "bandit>=1.7.0",
+    "ruff>=0.1.0",
+    "pre-commit>=3.3.0",
+    "types-setuptools",
+    "pip-audit>=1.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/MarcSchuh/OpsBox"
+Repository = "https://github.com/MarcSchuh/OpsBox"
+Documentation = "https://opsbox.readthedocs.io"
+"Bug Tracker" = "https://github.com/MarcSchuh/OpsBox/issues"
+
+[project.scripts]
+opsbox = "opsbox.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/opsbox"]
+
+# Ruff configuration
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "E501",  # Line too long (handled by formatter)
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+"tests/**/*" = ["S101", "PLR0913"]
+
+# MyPy configuration
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+disallow_untyped_defs = true
+check_untyped_defs = true
+show_error_codes = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
+# Pytest configuration
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["*_test.py", "test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--cov=src/opsbox",
+    "--cov-report=term-missing",
+    "--cov-report=xml",
+]
+
+# Coverage configuration
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
