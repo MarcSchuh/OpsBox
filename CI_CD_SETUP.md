@@ -13,6 +13,7 @@ The CI pipeline consists of three jobs:
 ## Required Status Checks
 
 Configure these status checks in branch protection rules:
+
 - `quality` (Code Quality)
 - `test` (Tests)
 - `security` (Security Scan)
@@ -30,6 +31,7 @@ Configure these status checks in branch protection rules:
 ## Local Development
 
 Install pre-commit hooks:
+
 ```bash
 uv sync --extra dev
 pre-commit install

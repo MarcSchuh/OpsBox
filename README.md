@@ -48,6 +48,7 @@ opsbox = {path = "../opsbox", editable = true}
 ```
 
 Then install dependencies:
+
 ```bash
 uv sync
 ```
@@ -56,7 +57,7 @@ uv sync
 
 You can also add OpsBox directly from GitHub using uv:
 
-```bash
+````bash
 # Add OpsBox from GitHub to your project
 uv add git+https://github.com/MarcSchuh/OpsBox.git
 
@@ -80,7 +81,7 @@ backup_path = backup_mgr.create_backup("/path/to/source")
 mailer = EncryptedMailer("/path/to/key.pem")
 mailer.load_key()
 encrypted = mailer.encrypt_message("Hello, world!")
-```
+````
 
 ## Using OpsBox in Your Projects
 
@@ -126,6 +127,7 @@ cd OpsBox
 ```
 
 This script will:
+
 - Check if uv is installed
 - Set up Python virtual environment
 - Install all development dependencies
@@ -134,12 +136,14 @@ This script will:
 ### Manual Setup
 
 1. **Clone the repository**:
+
    ```bash
    git clone https://github.com/MarcSchuh/OpsBox.git
    cd OpsBox
    ```
 
 2. **Setup Python environment**:
+
    ```bash
    uv venv
    source .venv/bin/activate
@@ -147,17 +151,20 @@ This script will:
    ```
 
 3. **Install dependencies**:
+
    ```bash
    uv sync --optional dev
    ```
 
 4. **Install pre-commit hooks**:
+
    ```bash
    pre-commit install
    pre-commit install --hook-type commit-msg
    ```
 
 5. **Run tests**:
+
    ```bash
    uv run pytest
    ```
