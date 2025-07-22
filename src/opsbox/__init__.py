@@ -8,6 +8,6 @@ __version__ = "0.1.0"
 __author__ = "OpsBox Team"
 __email__ = "opsbox@example.com"
 
-from . import backup, mail, utils
+from . import backup, encrypted_mail, locking, logging, utils
 
-__all__ = ["backup", "mail", "utils"]
+__all__ = ["backup", "encrypted_mail", "locking", "logging", "utils"]

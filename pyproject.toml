@@ -23,7 +23,9 @@ classifiers = [
     "Topic :: System :: Systems Administration",
     "Topic :: Utilities",
 ]
-dependencies = []
+dependencies = [
+    "envelope>=2.3.0",
+]
 
 [project.optional-dependencies]
 dev = [

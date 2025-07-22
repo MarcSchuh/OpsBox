@@ -1,11 +1,13 @@
 # OpsBox
 
-A comprehensive Python library for server operations including backup scripts, encrypted mail functionality, and utility tools.
+A comprehensive Python library for server operations including backup scripts, encrypted mail functionality, logging management, and utility tools.
 
 ## Features
 
 - **Backup Management**: Secure backup operations for server files and databases
-- **Encrypted Mail**: Secure email communications with encryption support
+- **Encrypted Mail**: Secure email communications with GPG encryption support
+- **Logging System**: Centralized logging configuration with file rotation and console output
+- **Lock Management**: File-based locking mechanisms for concurrent operations
 - **Utility Functions**: Common server operation utilities and system information
 
 ## Installation
@@ -57,56 +59,158 @@ uv sync
 
 You can also add OpsBox directly from GitHub using uv:
 
-````bash
+```bash
 # Add OpsBox from GitHub to your project
 uv add git+https://github.com/MarcSchuh/OpsBox.git
-
+```
 
 ## Quick Start
 
 ```python
 from opsbox.backup import BackupManager
-from opsbox.mail import EncryptedMailer
+from opsbox.encrypted_mail import EncryptedMail
+from opsbox.logging import configure_logging, LoggingConfig
 from opsbox.utils import get_system_info
+
+# Configure logging
+logging_config = LoggingConfig(log_name="my_app")
+logger = configure_logging(logging_config)
 
 # Get system information
 info = get_system_info()
-print(f"Platform: {info['platform']}")
+logger.info(f"Platform: {info['platform']}")
 
 # Create a backup manager
 backup_mgr = BackupManager("/path/to/backups")
 backup_path = backup_mgr.create_backup("/path/to/source")
 
 # Set up encrypted mailer
-mailer = EncryptedMailer("/path/to/key.pem")
-mailer.load_key()
-encrypted = mailer.encrypt_message("Hello, world!")
-````
+mailer = EncryptedMail(logger, "/path/to/email_settings.json")
+mailer.send_mail_with_retries("Test Subject", "Hello, world!")
+```
 
 ## Using OpsBox in Your Projects
 
-### As a Library
+### Logging System
+
+OpsBox provides a comprehensive logging system with automatic file rotation and console output:
 
 ```python
-# Import and use OpsBox modules
-from pathlib import Path
-from opsbox.utils import get_system_info, validate_path
-from opsbox.backup import BackupManager
-from opsbox.mail import EncryptedMailer
+from opsbox.logging import configure_logging, LoggingConfig
 
-# Use the functionality
+# Basic setup
+config = LoggingConfig(log_name="my_app")
+logger = configure_logging(config)
+
+# Advanced configuration
+config = LoggingConfig(
+    log_name="my_app",
+    log_filename="custom.log",
+    log_level="DEBUG",
+    log_dir="/var/log/myapp",
+    max_bytes=10 * 1024 * 1024,  # 10MB
+    backup_count=5,
+    enable_console=True,
+    enable_file=True
+)
+logger = configure_logging(config)
+
+# Quick setup for common use cases
+from opsbox.logging import setup_logging
+logger = setup_logging(
+    app_name="my_app",
+    level="INFO",
+    log_to_file=True,
+    log_to_console=True
+)
+```
+
+### Encrypted Mail
+
+Send encrypted emails using GPG encryption with automatic retry logic:
+
+```python
+from opsbox.encrypted_mail import EncryptedMail
+from opsbox.logging import configure_logging, LoggingConfig
+
+# Configure logging
+logging_config = LoggingConfig(log_name="email_service")
+logger = configure_logging(logging_config)
+
+# Initialize encrypted mail service
+mailer = EncryptedMail(
+    logger=logger,
+    email_settings_path="/path/to/email_settings.json",
+    fail_silently=False
+)
+
+# Send email with retry logic
+mailer.send_mail_with_retries(
+    subject="Important Alert",
+    message="Server backup completed successfully",
+    mail_attachment="/path/to/backup.log"  # Optional
+)
+```
+
+Email settings JSON format:
+
+```json
+{
+  "sender": "alerts@example.com",
+  "recipient": "admin@example.com",
+  "password_lookup_1": "email",
+  "password_lookup_2": "password",
+  "host": "smtp.gmail.com",
+  "port": 587,
+  "user": "alerts@example.com",
+  "security": "starttls",
+  "gpg_key_id": "admin@example.com",
+  "default_user": "opsbox",
+  "password": null
+}
+```
+
+### Backup Management
+
+```python
+from opsbox.backup import BackupManager
+from pathlib import Path
+
+# Create backup manager
+backup_mgr = BackupManager("/path/to/backups")
+
+# Create backup
+backup_path = backup_mgr.create_backup("/path/to/source")
+print(f"Backup created at: {backup_path}")
+```
+
+### Utility Functions
+
+```python
+from opsbox.utils import get_system_info, validate_path
+from pathlib import Path
+
+# Get system information
 system_info = get_system_info()
 print(f"Running on: {system_info['platform']}")
 
 # Validate a path
 is_valid = validate_path(Path("/path/to/file"))
 print(f"Path is valid: {is_valid}")
+```
 
-# Create backup manager
-backup_mgr = BackupManager("/path/to/backups")
+### Lock Management
 
-# Set up encrypted mailer
-mailer = EncryptedMailer("/path/to/key.pem")
+```python
+from opsbox.locking import LockManager
+
+# Create lock manager
+lock_mgr = LockManager("/tmp/locks")
+
+# Acquire lock
+with lock_mgr.acquire("backup_operation"):
+    # Perform backup operation
+    print("Backup operation in progress...")
 ```
 
 ## Development Setup
@@ -250,15 +354,21 @@ OpsBox/
 │       ├── backup/
 │       │   ├── __init__.py
 │       │   └── scripts.py
-│       ├── mail/
+│       ├── encrypted_mail/
 │       │   ├── __init__.py
-│       │   └── encryption.py
+│       │   └── encrypted_mail.py
+│       ├── locking/
+│       │   └── lock_manager.py
+│       ├── logging/
+│       │   ├── __init__.py
+│       │   └── logger_setup.py
 │       └── utils/
 │           ├── __init__.py
 │           └── common.py
 ├── tests/
 │   ├── test_backup/
-│   ├── test_mail/
+│   ├── test_encrypted_mail/
+│   ├── test_logging/
 │   └── test_utils/
 ├── docs/
 ├── pyproject.toml
