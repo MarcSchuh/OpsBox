@@ -12,6 +12,7 @@ class EncryptedMailer:
         Args:
         ----
             key_file: Path to encryption key file
+
         """
         self.key_file = key_file
         self._encryption_key: bytes | None = None
@@ -26,6 +27,7 @@ class EncryptedMailer:
         Raises:
         ------
             FileNotFoundError: If key file doesn't exist
+
         """
         key_path = key_file or self.key_file
         if key_path is None:
@@ -53,6 +55,7 @@ class EncryptedMailer:
         Raises:
         ------
             ValueError: If encryption key is not loaded
+
         """
         if self._encryption_key is None:
             error_msg = "Encryption key not loaded"
@@ -75,6 +78,7 @@ class EncryptedMailer:
         Raises:
         ------
             ValueError: If encryption key is not loaded
+
         """
         if self._encryption_key is None:
             error_msg = "Encryption key not loaded"

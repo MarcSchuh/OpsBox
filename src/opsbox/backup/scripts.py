@@ -12,6 +12,7 @@ class BackupManager:
         Args:
         ----
             backup_dir: Directory where backups will be stored
+
         """
         self.backup_dir = Path(backup_dir)
         self.backup_dir.mkdir(parents=True, exist_ok=True)
@@ -35,6 +36,7 @@ class BackupManager:
         Raises:
         ------
             FileNotFoundError: If source_path doesn't exist
+
         """
         if not source_path.exists():
             error_msg = f"Source path does not exist: {source_path}"
@@ -50,5 +52,6 @@ class BackupManager:
         Returns
         -------
             List of backup file paths
+
         """
         return list(self.backup_dir.glob("*.backup"))

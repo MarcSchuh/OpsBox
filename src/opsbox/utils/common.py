@@ -11,6 +11,7 @@ def get_system_info() -> dict[str, Any]:
     Returns
     -------
         Dictionary containing system information
+
     """
     return {
         "platform": platform.system(),
@@ -32,5 +33,6 @@ def validate_path(path: Path, *, must_exist: bool = False) -> bool:
     Returns:
     -------
         True if path is valid, False otherwise
+
     """
     return path.exists() if must_exist else True

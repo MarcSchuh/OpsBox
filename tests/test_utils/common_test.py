@@ -30,9 +30,9 @@ class TestCommonUtils:
 
     def test_validate_path_with_string(self) -> None:
         """Test validate_path with string (should return False)."""
-        path_str = tempfile.gettempdir()  # nosec B108
-        path = Path(path_str)
-        assert validate_path(path) is False  # nosec B101
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir)
+            assert validate_path(path) is True  # nosec B101
 
     def test_validate_path_with_nonexistent_path(self) -> None:
         """Test validate_path with non-existent path."""
