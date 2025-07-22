@@ -4,11 +4,8 @@ import logging
 import types
 from pathlib import Path
 
-from opsbox.encrypted_mail import EmailSettingsNotFoundError, EncryptedMail
-
-
-class LockAlreadyTakenError(Exception):
-    """Exception raised when a lock is already taken by another process."""
+from opsbox.encrypted_mail import EncryptedMail
+from opsbox.exceptions import EmailSettingsNotFoundError, LockAlreadyTakenError
 
 
 class LockManager:

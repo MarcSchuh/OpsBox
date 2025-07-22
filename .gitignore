@@ -19,6 +19,7 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+*.spec
 
 # Virtual environments
 .venv/
@@ -64,4 +65,4 @@ dmypy.json
 Thumbs.db
 
 # Node
-node_modules/*
+node_modules/

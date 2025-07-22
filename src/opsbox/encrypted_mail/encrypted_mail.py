@@ -13,11 +13,8 @@ from pathlib import Path
 
 from envelope import Envelope
 
+from opsbox.exceptions import EmailSettingsNotFoundError
 from opsbox.logging import LoggingConfig, configure_logging
-
-
-class EmailSettingsNotFoundError(Exception):
-    """Exception raised when email settings file is not found or invalid."""
 
 
 @dataclass(frozen=True)
