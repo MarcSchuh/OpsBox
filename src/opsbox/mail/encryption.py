@@ -48,14 +48,6 @@ class EncryptedMailer:
         ----
             message: Plain text message to encrypt
 
-        Returns:
-        -------
-            Encrypted message as bytes
-
-        Raises:
-        ------
-            ValueError: If encryption key is not loaded
-
         """
         if self._encryption_key is None:
             error_msg = "Encryption key not loaded"
