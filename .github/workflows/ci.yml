@@ -48,7 +48,7 @@ jobs:
         run: uv run ruff format --check src/ tests/
 
       - name: Run MyPy type checking
-        run: uv run mypy src/
+        run: uv run mypy --config-file pyproject.toml src/
 
   test:
     name: Tests
