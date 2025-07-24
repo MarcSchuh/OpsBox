@@ -6,7 +6,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from src.opsbox.logging.logger_setup import (
+
+from opsbox.logging.logger_setup import (
     LoggerConfigError,
     LoggingConfig,
     configure_logging,

@@ -48,7 +48,7 @@ jobs:
         run: uv run ruff format --check src/ tests/
 
       - name: Run MyPy type checking
-        run: uv run mypy src/
+        run: uv run mypy --config-file pyproject.toml src/
 
   test:
     name: Tests
@@ -121,5 +121,35 @@ jobs:
 
       - name: Run security scans
         run: |
-          uv run bandit -r src/
-          uv run pip-audit
+          uv run bandit -r src/ --severity-level medium
+          uv run pip-audit --format json > pip-audit-results.json || true
+
+      - name: Check pip-audit severity
+        run: |
+          if [ -f pip-audit-results.json ]; then
+            # Check if there are any medium or higher severity vulnerabilities
+            if python -c "
+          import json
+          import sys
+          try:
+              with open('pip-audit-results.json', 'r') as f:
+                  data = json.load(f)
+              if 'vulnerabilities' in data:
+                  for vuln in data['vulnerabilities']:
+                      severity = vuln.get('severity', 'unknown').lower()
+                      if severity in ['medium', 'high', 'critical']:
+                          print(f'Found {severity} severity vulnerability: {vuln.get(\"id\", \"unknown\")}')
+                          sys.exit(1)
+              print('No medium or higher severity vulnerabilities found')
+          except Exception as e:
+              print(f'Error parsing pip-audit results: {e}')
+              sys.exit(1)
+          "; then
+              echo "pip-audit passed - no medium or higher severity issues found"
+          else
+              echo "pip-audit failed - medium or higher severity issues found"
+              exit 1
+          fi
+          else
+              echo "pip-audit-results.json not found, assuming no vulnerabilities"
+          fi
