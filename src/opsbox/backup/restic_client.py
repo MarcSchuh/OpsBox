@@ -104,14 +104,9 @@ class ResticClient:
         """Execute a command with proper error handling and logging."""
         self.logger.debug(f"Running command: {' '.join(command)}")
 
-        # Clear previous log content and write command header
-        with self.log_file.open("a") as f:
-            f.write(f"Command: {' '.join(command)}\n")
-            f.write("=" * 80 + "\n")
-
         try:
             # Run command and capture output to log file
-            with self.log_file.open("a") as f:
+            with self.log_file.open("w") as f:
                 result = subprocess.run(  # noqa: S603
                     command,
                     capture_output=False,
@@ -123,6 +118,7 @@ class ResticClient:
                     stderr=subprocess.STDOUT,
                 )
 
+            result.stdout = self.log_file.read_text()
             # Check for non-zero exit code
             if result.returncode != 0:
                 log_contents = (
@@ -169,8 +165,6 @@ class ResticClient:
         excluded_files: list[str],
     ) -> str:
         """Run restic backup and return the snapshot ID."""
-        self.logger.info(f"Starting backup of {backup_source}")
-
         cmd = [
             self.restic_path,
             "backup",
@@ -181,6 +175,7 @@ class ResticClient:
             "--one-file-system",
             *self._get_cache_dir_args(),
         ]
+        self.logger.info(f"Executing command: {' '.join(cmd)}")
 
         for exclude in excluded_files:
             cmd.extend(["--exclude", exclude])
@@ -252,7 +247,7 @@ class ResticClient:
             error_msg = "Failed to get diff between snapshots"
             raise ResticCommandFailedError(error_msg)
 
-        return result.stdout or ""
+        return result.stdout
 
     def find(self, file_pattern: str, snapshot_id: str) -> str:
         """Find files in a snapshot."""

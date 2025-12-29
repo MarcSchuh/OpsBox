@@ -21,3 +21,7 @@ restic_password: null
 user_id: null
 deletion_threshold: null # Send warning email if more than this many files are deleted (null to disable)
 alteration_threshold: null # Send warning email if more than this many files are altered (null to disable)
+monitored_folders: [] # List of folders to monitor for changes (empty list to disable)
+  # Example:
+  # - /path/to/important/folder
+  # - /another/monitored/path

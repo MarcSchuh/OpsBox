@@ -378,6 +378,10 @@ class BackupScript:
         altered_files: list[str] = []
         seen_files: set[str] = set()
 
+        # Handle None or empty diff output
+        if not diff_output:
+            return deleted_files, altered_files
+
         # Track if we're in a modified section
         in_modified_section = False
 
@@ -486,11 +490,121 @@ class BackupScript:
                 ),
             )
 
+    def _is_file_in_monitored_folder(self, file_path: str) -> bool:
+        """Check if a file is within any of the monitored folders.
+
+        Args:
+            file_path: Path to the file to check
+
+        Returns:
+            True if the file is in a monitored folder, False otherwise
+
+        """
+        if not self.config.monitored_folders:
+            return False
+
+        # Normalize the file path
+        normalized_file_path = Path(file_path).as_posix()
+
+        for monitored_folder in self.config.monitored_folders:
+            # Normalize the monitored folder path
+            normalized_folder = Path(monitored_folder).as_posix()
+            # Ensure folder path ends with / for proper matching
+            if not normalized_folder.endswith("/"):
+                normalized_folder += "/"
+
+            # Check if file path starts with the monitored folder path
+            if normalized_file_path.startswith(normalized_folder):
+                return True
+
+        return False
+
+    def _filter_files_in_monitored_folders(
+        self,
+        files: list[str],
+    ) -> list[str]:
+        """Filter files to only include those in monitored folders.
+
+        Args:
+            files: List of file paths to filter
+
+        Returns:
+            List of files that are in monitored folders
+
+        """
+        return [
+            file_path
+            for file_path in files
+            if self._is_file_in_monitored_folder(file_path)
+        ]
+
+    def _check_monitored_folders_and_send_alerts(
+        self,
+        deleted_files: list[str],
+        altered_files: list[str],
+        snapshot_id: str,
+    ) -> None:
+        """Check for changes in monitored folders and send email alerts.
+
+        Args:
+            deleted_files: List of deleted file paths
+            altered_files: List of altered file paths
+            snapshot_id: Current snapshot ID for context
+
+        """
+        if not self.config.monitored_folders:
+            return
+
+        # Filter files to only those in monitored folders
+        monitored_deleted = self._filter_files_in_monitored_folders(deleted_files)
+        monitored_altered = self._filter_files_in_monitored_folders(altered_files)
+
+        # Send alert for deleted files in monitored folders
+        if monitored_deleted:
+            self.logger.warning(
+                f"Files deleted in monitored folders: {len(monitored_deleted)} files",
+            )
+            deleted_list = "\n".join(
+                monitored_deleted[: self.MAX_FILES_IN_EMAIL],
+            )
+            if len(monitored_deleted) > self.MAX_FILES_IN_EMAIL:
+                deleted_list += f"\n... and {len(monitored_deleted) - self.MAX_FILES_IN_EMAIL} more files"
+            self.encrypted_mail.send_mail_with_retries(
+                subject=f"Backup Alert: {len(monitored_deleted)} files deleted in monitored folders",
+                message=(
+                    f"Alert: The backup detected {len(monitored_deleted)} deleted files "
+                    f"in monitored folders.\n\n"
+                    f"Snapshot ID: {snapshot_id}\n\n"
+                    f"Monitored folders: {', '.join(self.config.monitored_folders)}\n\n"
+                    f"Deleted files:\n{deleted_list}"
+                ),
+            )
+
+        # Send alert for altered files in monitored folders
+        if monitored_altered:
+            self.logger.warning(
+                f"Files altered in monitored folders: {len(monitored_altered)} files",
+            )
+            altered_list = "\n".join(
+                monitored_altered[: self.MAX_FILES_IN_EMAIL],
+            )
+            if len(monitored_altered) > self.MAX_FILES_IN_EMAIL:
+                altered_list += f"\n... and {len(monitored_altered) - self.MAX_FILES_IN_EMAIL} more files"
+            self.encrypted_mail.send_mail_with_retries(
+                subject=f"Backup Alert: {len(monitored_altered)} files altered in monitored folders",
+                message=(
+                    f"Alert: The backup detected {len(monitored_altered)} altered files "
+                    f"in monitored folders.\n\n"
+                    f"Snapshot ID: {snapshot_id}\n\n"
+                    f"Monitored folders: {', '.join(self.config.monitored_folders)}\n\n"
+                    f"Altered files:\n{altered_list}"
+                ),
+            )
+
     def _generate_diff_summary(self, snapshot_id: str) -> str:
         """Generate diff summary between current and previous snapshot."""
         try:
             snapshots = self.restic_client.get_snapshots()
-
             if len(snapshots) < self.MIN_SNAPSHOTS_FOR_DIFF:
                 return "Not enough snapshots to generate diff summary."
 
@@ -504,6 +618,13 @@ class BackupScript:
 
             # Check thresholds and send warnings if needed
             self._check_thresholds_and_send_warnings(
+                deleted_files,
+                altered_files,
+                snapshot_id,
+            )
+
+            # Check monitored folders and send alerts if needed
+            self._check_monitored_folders_and_send_alerts(
                 deleted_files,
                 altered_files,
                 snapshot_id,
