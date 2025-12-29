@@ -4,7 +4,6 @@ import argparse
 import os
 import sys
 import tempfile
-import time
 from pathlib import Path
 
 from opsbox.backup.config_manager import ConfigManager
@@ -15,6 +14,8 @@ from opsbox.backup.exceptions import (
     MaintenanceError,
     NetworkUnreachableError,
     ResticBackupFailedError,
+    ResticCommandFailedError,
+    SnapshotIDNotFoundError,
     SSHKeyNotFoundError,
     UserDoesNotExistError,
     WrongOSForResticBackupError,
@@ -38,6 +39,7 @@ class BackupScript:
         config_path: str,
         restic_path: str = "/snap/bin/restic",
         temp_dir: str | None = None,
+        log_level: str = "INFO",
     ) -> None:
         """Initialize the backup script with proper dependency injection.
 
@@ -45,6 +47,7 @@ class BackupScript:
             config_path: Path to configuration file
             restic_path: Path to restic executable
             temp_dir: Directory for temporary files (defaults to system temp dir)
+            log_level: Logging level (defaults to INFO)
 
         Raises:
             WrongOSForResticBackupError: If not running on Linux
@@ -59,7 +62,9 @@ class BackupScript:
 
         # Setup logging
         self.script_name = Path(__file__).name
-        self.logger = configure_logging(LoggingConfig(log_name=self.script_name))
+        self.logger = configure_logging(
+            LoggingConfig(log_name=self.script_name, log_level=log_level),
+        )
 
         # Setup temporary directory
         self.temp_dir = Path(temp_dir) if temp_dir else Path(tempfile.gettempdir())
@@ -99,10 +104,14 @@ class BackupScript:
         self.password_manager = PasswordManager(self.logger)
         self.network_checker = NetworkChecker(self.logger)
         self.ssh_manager = SSHManager(self.logger)
+
+        # Setup cache directory for restic
+
         self.restic_client = ResticClient(
             restic_path,
             self.config.backup_target,
             self.logger,
+            self.encrypted_mail,
         )
 
     def run(self) -> None:
@@ -168,9 +177,13 @@ class BackupScript:
         self.logger.info("Setting up restic environment")
 
         # Get restic password
+        # Type assertions: validation ensures password_lookup fields are provided
+        # when restic_password is not provided
+        password_lookup_1 = self.config.password_lookup_1 or ""
+        password_lookup_2 = self.config.password_lookup_2 or ""
         restic_password = self.password_manager.get_restic_password(
-            self.config.password_lookup_1,
-            self.config.password_lookup_2,
+            password_lookup_1,
+            password_lookup_2,
             self.config.restic_password,
         )
 
@@ -216,14 +229,10 @@ class BackupScript:
         """Execute the restic backup operation."""
         self.logger.info(f"Starting backup of {self.config.backup_source}")
 
-        # Create temporary log file
-        log_file = self.temp_dir / f"backup_log_{int(time.time())}.log"
-
         try:
             snapshot_id = self.restic_client.backup(
                 self.config.backup_source,
                 self.config.excluded_files,
-                log_file,
             )
 
             # Send success notification with diff summary
@@ -231,14 +240,20 @@ class BackupScript:
             self.encrypted_mail.send_mail_with_retries(
                 subject="Backup successful",
                 message=f"Backup completed successfully.\nSnapshot ID: {snapshot_id}\n\nDiff Summary:\n{diff_summary}",
-                mail_attachment=str(log_file),
+                mail_attachment=str(self.restic_client.log_file),
             )
-        except ResticBackupFailedError as e:
+        except (
+            ResticBackupFailedError,
+            SnapshotIDNotFoundError,
+            ResticCommandFailedError,
+        ) as e:
             # Send failure notification with log
             self.encrypted_mail.send_mail_with_retries(
                 subject="Backup failed",
                 message=f"Backup failed: {e}",
-                mail_attachment=str(log_file) if log_file.exists() else None,
+                mail_attachment=str(self.restic_client.log_file)
+                if self.restic_client.log_file.exists()
+                else None,
             )
             raise
         else:
@@ -387,17 +402,26 @@ def main() -> None:
         help="Path to restic executable",
     )
     parser.add_argument("--temp-dir", help="Directory for temporary files")
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Set the logging level (default: INFO)",
+    )
 
     args = parser.parse_args()
 
     # Setup basic logging for main function
-    logger = configure_logging(LoggingConfig(log_name="backup_script"))
+    logger = configure_logging(
+        LoggingConfig(log_name="backup_script", log_level=args.log_level),
+    )
 
     try:
         backup_script = BackupScript(
             config_path=args.config,
             restic_path=args.restic_path,
             temp_dir=args.temp_dir,
+            log_level=args.log_level,
         )
         backup_script.run()
     except (ConfigurationError, InvalidResticConfigError):

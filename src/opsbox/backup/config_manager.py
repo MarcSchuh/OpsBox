@@ -17,10 +17,10 @@ class BackupConfig:
     backup_source: str
     excluded_files: list[str]
     backup_target: str
-    password_lookup_1: str
-    password_lookup_2: str
     email_settings_path: str
     file_to_check: str
+    password_lookup_1: str | None = None
+    password_lookup_2: str | None = None
 
     # Optional fields with defaults
     default_user: str = field(default_factory=lambda: os.getlogin())
@@ -29,12 +29,12 @@ class BackupConfig:
     keep_monthly: str = "5"
     ssh_key_max_retries: int = 12
     detailed_report: bool = True
+    restic_password: str | None = None
 
     # Network and SSH fields
     network_host: str | None = None
     ssh_key: str | None = None
     ssh_user: str | None = None
-    restic_password: str | None = None
     user_id: int | None = None
 
     def __post_init__(self) -> None:
@@ -46,20 +46,52 @@ class BackupConfig:
 
     def _validate_required_fields(self) -> None:
         """Validate that all required fields are present and non-empty."""
-        required_fields = [
-            "backup_source",
-            "backup_target",
-            "password_lookup_1",
-            "password_lookup_2",
-            "email_settings_path",
-            "file_to_check",
-        ]
+        # If restic_password is provided, password_lookup fields are optional
+        if self.restic_password:
+            required_fields = [
+                "backup_source",
+                "backup_target",
+                "email_settings_path",
+                "file_to_check",
+            ]
+        else:
+            required_fields = [
+                "backup_source",
+                "backup_target",
+                "password_lookup_1",
+                "password_lookup_2",
+                "email_settings_path",
+                "file_to_check",
+            ]
 
         for field_name in required_fields:
             value = getattr(self, field_name)
             if not value or not str(value).strip():
                 error_msg = f"Required field '{field_name}' cannot be empty"
                 raise InvalidResticConfigError(error_msg)
+
+        # Validate password configuration logic
+        self._validate_password_configuration()
+
+    def _validate_password_configuration(self) -> None:
+        """Validate password configuration logic."""
+        has_restic_password = bool(
+            self.restic_password and self.restic_password.strip(),
+        )
+        has_password_lookups = bool(
+            self.password_lookup_1
+            and self.password_lookup_1.strip()
+            and self.password_lookup_2
+            and self.password_lookup_2.strip(),
+        )
+
+        if not has_restic_password and not has_password_lookups:
+            error_msg = "Either 'restic_password' must be provided, or both 'password_lookup_1' and 'password_lookup_2' must be provided"
+            raise InvalidResticConfigError(error_msg)
+
+        if has_restic_password and has_password_lookups:
+            error_msg = "Cannot provide both 'restic_password' and password lookup fields. Use either direct password or password lookup mechanism"
+            raise InvalidResticConfigError(error_msg)
 
     def _validate_ssh_configuration(self) -> None:
         """Validate SSH configuration consistency."""
@@ -134,8 +166,8 @@ class ConfigManager:
                 backup_source=config_data["backup_source"],
                 excluded_files=config_data["excluded_files"],
                 backup_target=config_data["backup_target"],
-                password_lookup_1=config_data["password_lookup_1"],
-                password_lookup_2=config_data["password_lookup_2"],
+                password_lookup_1=config_data.get("password_lookup_1"),
+                password_lookup_2=config_data.get("password_lookup_2"),
                 email_settings_path=config_data["email_settings_path"],
                 file_to_check=config_data["file_to_check"],
                 ssh_key=config_data.get("ssh_key"),
@@ -178,8 +210,8 @@ class ConfigManager:
             "backup_source": "/path/to/backup/source",
             "excluded_files": ["*.tmp", "*.log"],
             "backup_target": "sftp:user@host:/path/to/repo",
-            "password_lookup_1": "label",
-            "password_lookup_2": "attribute",
+            "password_lookup_1": None,  # Optional when restic_password is provided
+            "password_lookup_2": None,  # Optional when restic_password is provided
             "email_settings_path": "/path/to/email/settings.json",
             "file_to_check": "important_file.txt",
             "default_user": "backup_user",
@@ -191,6 +223,6 @@ class ConfigManager:
             "network_host": None,
             "ssh_key": None,
             "ssh_user": None,
-            "restic_password": None,
+            "restic_password": None,  # If provided, password_lookup_1/2 become optional
             "user_id": None,
         }
