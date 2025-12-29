@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from opsbox.backup.exceptions import ConfigurationError, InvalidResticConfigError
 
 
@@ -134,10 +136,10 @@ class ConfigManager:
 
     @staticmethod
     def load_config(config_path: str) -> BackupConfig:
-        """Load and validate configuration from JSON file.
+        """Load and validate configuration from YAML or JSON file.
 
         Args:
-            config_path: Path to the configuration JSON file
+            config_path: Path to the configuration YAML or JSON file
 
         Returns:
             Validated BackupConfig instance
@@ -147,14 +149,18 @@ class ConfigManager:
             InvalidResticConfigError: If configuration is invalid
 
         """
+        config_path_obj = Path(config_path)
         try:
-            with Path(config_path).open(encoding="utf-8") as f:
-                config_data = json.load(f)
+            with config_path_obj.open(encoding="utf-8") as f:
+                if config_path_obj.suffix in (".yaml", ".yml"):
+                    config_data = yaml.safe_load(f)
+                else:
+                    config_data = json.load(f)
         except FileNotFoundError as e:
             error_msg = f"Configuration file not found: {config_path}"
             raise ConfigurationError(error_msg) from e
-        except json.JSONDecodeError as e:
-            error_msg = f"Invalid JSON in configuration file: {e}"
+        except (json.JSONDecodeError, yaml.YAMLError) as e:
+            error_msg = f"Invalid configuration file format: {e}"
             raise ConfigurationError(error_msg) from e
         except Exception as e:
             error_msg = f"Error loading configuration: {e}"
