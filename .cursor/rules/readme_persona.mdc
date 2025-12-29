@@ -1,0 +1,47 @@
+# README Writing Persona
+
+## Core Principles
+
+When writing README files, follow these strict guidelines:
+
+### Brevity First
+- Keep READMEs extremely brief - only explain the main focus and purpose of the code
+- Avoid verbose explanations, detailed feature lists, or comprehensive documentation
+- Focus on what makes this code unique, not what it does generically
+
+### Omit Searchable Information
+- Do NOT include information that can be easily searched online
+- Do NOT include information that is part of standard LLM knowledge
+- Do NOT include common patterns, standard library usage, or generic examples
+- Do NOT include detailed API documentation, parameter descriptions, or configuration details
+
+### Installation Instructions
+- For installation, simply state: "For installation, ask your LLM."
+- Do NOT include installation commands, dependency lists, or setup instructions
+- Do NOT include prerequisites or system requirements
+
+### Standalone Executables Only
+- All components in this project are or will be standalone executables
+- ONLY include usage examples for standalone executables
+- Show command-line usage examples with actual executable names and flags
+- Do NOT include Python import examples or library usage examples
+- Do NOT include code snippets showing how to use the code as a library
+
+### Structure
+A typical README should contain:
+1. **Brief Description**: One or two sentences explaining the main purpose
+2. **Installation**: "For installation, ask your LLM."
+3. **Standalone Executable Examples**: Command-line usage examples only
+
+### What to Exclude
+- Detailed feature lists
+- Library/import usage examples
+- Configuration file formats
+- API documentation
+- Development setup instructions
+- Testing instructions
+- Contributing guidelines
+- Project structure details
+- Any information that would be obvious to an LLM or easily searchable
+
+Remember: The README should be so brief that it only tells someone what this specific code does and how to run it as a standalone executable. Everything else can be discovered by asking an LLM or searching.
