@@ -19,3 +19,5 @@ ssh_key: null
 ssh_user: null
 restic_password: null
 user_id: null
+deletion_threshold: null # Send warning email if more than this many files are deleted (null to disable)
+alteration_threshold: null # Send warning email if more than this many files are altered (null to disable)

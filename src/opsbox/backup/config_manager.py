@@ -39,6 +39,10 @@ class BackupConfig:
     ssh_user: str | None = None
     user_id: int | None = None
 
+    # Threshold fields for warning emails
+    deletion_threshold: int | None = None
+    alteration_threshold: int | None = None
+
     def __post_init__(self) -> None:
         """Validate configuration after initialization."""
         self._validate_required_fields()
@@ -187,6 +191,8 @@ class ConfigManager:
                 restic_password=config_data.get("restic_password"),
                 user_id=config_data.get("user_id", os.getuid()),
                 detailed_report=config_data.get("detailed_report", True),
+                deletion_threshold=config_data.get("deletion_threshold"),
+                alteration_threshold=config_data.get("alteration_threshold"),
             )
 
         except KeyError as e:
@@ -231,4 +237,6 @@ class ConfigManager:
             "ssh_user": None,
             "restic_password": None,  # If provided, password_lookup_1/2 become optional
             "user_id": None,
+            "deletion_threshold": None,  # Send warning if more than this many files deleted
+            "alteration_threshold": None,  # Send warning if more than this many files altered
         }

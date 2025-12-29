@@ -105,7 +105,7 @@ class ResticClient:
         self.logger.debug(f"Running command: {' '.join(command)}")
 
         # Clear previous log content and write command header
-        with self.log_file.open("w") as f:
+        with self.log_file.open("a") as f:
             f.write(f"Command: {' '.join(command)}\n")
             f.write("=" * 80 + "\n")
 

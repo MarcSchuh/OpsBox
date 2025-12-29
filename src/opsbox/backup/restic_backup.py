@@ -33,6 +33,7 @@ class BackupScript:
     """Refactored backup script with improved architecture and error handling."""
 
     MIN_SNAPSHOTS_FOR_DIFF = 2
+    MAX_FILES_IN_EMAIL = 100
 
     def __init__(
         self,
@@ -259,6 +260,232 @@ class BackupScript:
         else:
             return snapshot_id
 
+    def _is_section_header(self, line: str) -> bool:
+        """Check if a line is a section header.
+
+        Args:
+            line: Line to check
+
+        Returns:
+            True if the line is a section header
+
+        """
+        line_lower = line.lower()
+        return any(
+            word in line_lower
+            for word in [
+                "files:",
+                "dirs:",
+                "others:",
+                "data blobs:",
+                "tree blobs:",
+                "summary",
+            ]
+        )
+
+    def _extract_deleted_file(self, line: str, seen_files: set[str]) -> str | None:
+        """Extract deleted file path from a line.
+
+        Args:
+            line: Line to parse
+            seen_files: Set of already seen files
+
+        Returns:
+            File path if found, None otherwise
+
+        """
+        if not line.startswith("-") or line.startswith("---"):
+            return None
+
+        file_path = line[1:].strip()
+        # Remove any size/metadata info after the path
+        if " " in file_path:
+            file_path = file_path.split()[0]
+
+        if file_path and "/" in file_path and file_path not in seen_files:
+            return file_path
+        return None
+
+    def _extract_altered_file_from_modified_line(
+        self,
+        line: str,
+        seen_files: set[str],
+    ) -> str | None:
+        """Extract altered file path from a line showing modifications.
+
+        Args:
+            line: Line to parse
+            seen_files: Set of already seen files
+
+        Returns:
+            File path if found, None otherwise
+
+        """
+        parts = line.split()
+        for part in parts:
+            if part.startswith("/") or (
+                len(part) > 1 and "/" in part and not part.startswith("-")
+            ):
+                file_path = part
+                # Clean up any trailing metadata (size info, arrows, etc.)
+                if "->" in file_path:
+                    file_path = file_path.split("->")[0].strip()
+                if "B" in file_path and file_path.endswith("B"):
+                    # Skip if it's just a size like "1234B"
+                    continue
+                if file_path and "/" in file_path and file_path not in seen_files:
+                    return file_path
+        return None
+
+    def _extract_altered_file_from_plain_path(
+        self,
+        line: str,
+        seen_files: set[str],
+    ) -> str | None:
+        """Extract altered file path from a plain path line.
+
+        Args:
+            line: Line to parse
+            seen_files: Set of already seen files
+
+        Returns:
+            File path if found, None otherwise
+
+        """
+        if (
+            line.startswith("/")
+            or (
+                not line.startswith("-")
+                and not line.startswith("+")
+                and "/" in line
+                and len(line.split()) == 1
+            )
+        ) and line not in seen_files:
+            return line
+        return None
+
+    def _parse_diff_output(self, diff_output: str) -> tuple[list[str], list[str]]:
+        """Parse restic diff output to extract deleted and altered files.
+
+        Args:
+            diff_output: The raw output from restic diff command
+
+        Returns:
+            Tuple of (deleted_files, altered_files) lists
+
+        """
+        deleted_files: list[str] = []
+        altered_files: list[str] = []
+        seen_files: set[str] = set()
+
+        # Track if we're in a modified section
+        in_modified_section = False
+
+        for line in diff_output.splitlines():
+            line_stripped = line.strip()
+            if not line_stripped:
+                continue
+
+            # Detect section headers
+            line_lower = line_stripped.lower()
+            if "modified" in line_lower or "changed" in line_lower:
+                in_modified_section = True
+                continue
+            if self._is_section_header(line_stripped):
+                in_modified_section = False
+                continue
+
+            # Try to extract deleted file
+            deleted_file = self._extract_deleted_file(line_stripped, seen_files)
+            if deleted_file:
+                deleted_files.append(deleted_file)
+                seen_files.add(deleted_file)
+                continue
+
+            # Try to extract altered file from modified line
+            if "->" in line_stripped or "B" in line_stripped or in_modified_section:
+                altered_file = self._extract_altered_file_from_modified_line(
+                    line_stripped,
+                    seen_files,
+                )
+                if altered_file:
+                    altered_files.append(altered_file)
+                    seen_files.add(altered_file)
+                    continue
+
+            # Try to extract altered file from plain path
+            altered_file = self._extract_altered_file_from_plain_path(
+                line_stripped,
+                seen_files,
+            )
+            if altered_file:
+                altered_files.append(altered_file)
+                seen_files.add(altered_file)
+
+        return deleted_files, altered_files
+
+    def _check_thresholds_and_send_warnings(
+        self,
+        deleted_files: list[str],
+        altered_files: list[str],
+        snapshot_id: str,
+    ) -> None:
+        """Check thresholds and send warning emails if exceeded.
+
+        Args:
+            deleted_files: List of deleted file paths
+            altered_files: List of altered file paths
+            snapshot_id: Current snapshot ID for context
+
+        """
+        # Check deletion threshold
+        if (
+            self.config.deletion_threshold is not None
+            and len(deleted_files) > self.config.deletion_threshold
+        ):
+            self.logger.warning(
+                f"Deletion threshold exceeded: {len(deleted_files)} files deleted "
+                f"(threshold: {self.config.deletion_threshold})",
+            )
+            deleted_list = "\n".join(
+                deleted_files[: self.MAX_FILES_IN_EMAIL],
+            )  # Limit to first N files
+            if len(deleted_files) > self.MAX_FILES_IN_EMAIL:
+                deleted_list += f"\n... and {len(deleted_files) - self.MAX_FILES_IN_EMAIL} more files"
+            self.encrypted_mail.send_mail_with_retries(
+                subject=f"Backup Warning: {len(deleted_files)} files deleted (threshold: {self.config.deletion_threshold})",
+                message=(
+                    f"Warning: The backup detected {len(deleted_files)} deleted files, "
+                    f"which exceeds the threshold of {self.config.deletion_threshold}.\n\n"
+                    f"Snapshot ID: {snapshot_id}\n\n"
+                    f"Deleted files:\n{deleted_list}"
+                ),
+            )
+
+        # Check alteration threshold
+        if (
+            self.config.alteration_threshold is not None
+            and len(altered_files) > self.config.alteration_threshold
+        ):
+            self.logger.warning(
+                f"Alteration threshold exceeded: {len(altered_files)} files altered "
+                f"(threshold: {self.config.alteration_threshold})",
+            )
+            altered_list = "\n".join(
+                altered_files[: self.MAX_FILES_IN_EMAIL],
+            )  # Limit to first N files
+            if len(altered_files) > self.MAX_FILES_IN_EMAIL:
+                altered_list += f"\n... and {len(altered_files) - self.MAX_FILES_IN_EMAIL} more files"
+            self.encrypted_mail.send_mail_with_retries(
+                subject=f"Backup Warning: {len(altered_files)} files altered (threshold: {self.config.alteration_threshold})",
+                message=(
+                    f"Warning: The backup detected {len(altered_files)} altered files, "
+                    f"which exceeds the threshold of {self.config.alteration_threshold}.\n\n"
+                    f"Snapshot ID: {snapshot_id}\n\n"
+                    f"Altered files:\n{altered_list}"
+                ),
+            )
+
     def _generate_diff_summary(self, snapshot_id: str) -> str:
         """Generate diff summary between current and previous snapshot."""
         try:
@@ -271,6 +498,16 @@ class BackupScript:
             previous_snapshot = snapshots[-2]
 
             diff_output = self.restic_client.diff(previous_snapshot, snapshot_id)
+
+            # Parse diff output to extract deleted and altered files for threshold checking
+            deleted_files, altered_files = self._parse_diff_output(diff_output)
+
+            # Check thresholds and send warnings if needed
+            self._check_thresholds_and_send_warnings(
+                deleted_files,
+                altered_files,
+                snapshot_id,
+            )
 
             # Parse diff output to extract summary
             summary_lines = []
