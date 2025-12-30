@@ -81,3 +81,7 @@ class VerificationError(BackupError):
 
 class MaintenanceError(BackupError):
     """Raised when maintenance operations fail."""
+
+
+class DiffParsingError(BackupError):
+    """Raised when there are issues parsing the diff output."""

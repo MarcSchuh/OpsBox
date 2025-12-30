@@ -10,6 +10,7 @@ from opsbox.backup.config_manager import ConfigManager
 from opsbox.backup.exceptions import (
     BackupError,
     ConfigurationError,
+    DiffParsingError,
     InvalidResticConfigError,
     MaintenanceError,
     NetworkUnreachableError,
@@ -283,155 +284,85 @@ class BackupScript:
             ]
         )
 
-    def _extract_deleted_file(self, line: str, seen_files: set[str]) -> str | None:
-        """Extract deleted file path from a line.
-
-        Args:
-            line: Line to parse
-            seen_files: Set of already seen files
-
-        Returns:
-            File path if found, None otherwise
-
-        """
-        if not line.startswith("-") or line.startswith("---"):
-            return None
-
-        file_path = line[1:].strip()
-        # Remove any size/metadata info after the path
-        if " " in file_path:
-            file_path = file_path.split()[0]
-
-        if file_path and "/" in file_path and file_path not in seen_files:
-            return file_path
-        return None
-
-    def _extract_altered_file_from_modified_line(
+    def _extract_file_path_from_plain_path(
         self,
         line: str,
-        seen_files: set[str],
-    ) -> str | None:
-        """Extract altered file path from a line showing modifications.
+    ) -> Path:
+        """Extract file path from a plain path line in restic diff output.
+
+        Parses lines in the format:
+        - "M    /path/to/file.txt" (modified)
+        - "-    /path/to/file.txt" (deleted)
+        - "+    /path/to/file.txt" (added)
 
         Args:
-            line: Line to parse
-            seen_files: Set of already seen files
+            line: Line to parse (e.g., "M    /home/user/file.txt")
 
         Returns:
-            File path if found, None otherwise
+            File path as Path object if found, None otherwise
 
         """
-        parts = line.split()
-        for part in parts:
-            if part.startswith("/") or (
-                len(part) > 1 and "/" in part and not part.startswith("-")
-            ):
-                file_path = part
-                # Clean up any trailing metadata (size info, arrows, etc.)
-                if "->" in file_path:
-                    file_path = file_path.split("->")[0].strip()
-                if "B" in file_path and file_path.endswith("B"):
-                    # Skip if it's just a size like "1234B"
-                    continue
-                if file_path and "/" in file_path and file_path not in seen_files:
-                    return file_path
-        return None
+        line_stripped = line.strip()
+        if not line_stripped:
+            error_msg = "Empty line in diff output"
+            self.logger.error(error_msg)
+            raise DiffParsingError(error_msg)
 
-    def _extract_altered_file_from_plain_path(
+        # Check if line starts with M, -, or + followed by spaces
+        if line_stripped.startswith(("M", "-", "+")):
+            # Remove the prefix character and any following whitespace
+            path_str = line_stripped[1:].strip()
+            if path_str and path_str.startswith("/"):
+                return Path(path_str)
+        error_msg = f"Invalid line in diff output: {line_stripped}"
+        self.logger.error(error_msg)
+        raise DiffParsingError(error_msg)
+
+    def _parse_diff_output(
         self,
-        line: str,
-        seen_files: set[str],
-    ) -> str | None:
-        """Extract altered file path from a plain path line.
-
-        Args:
-            line: Line to parse
-            seen_files: Set of already seen files
-
-        Returns:
-            File path if found, None otherwise
-
-        """
-        if (
-            line.startswith("/")
-            or (
-                not line.startswith("-")
-                and not line.startswith("+")
-                and "/" in line
-                and len(line.split()) == 1
-            )
-        ) and line not in seen_files:
-            return line
-        return None
-
-    def _parse_diff_output(self, diff_output: str) -> tuple[list[str], list[str]]:
+        diff_output: str,
+    ) -> tuple[list[Path], list[Path]]:
         """Parse restic diff output to extract deleted and altered files.
 
         Args:
             diff_output: The raw output from restic diff command
 
         Returns:
-            Tuple of (deleted_files, altered_files) lists
+            Tuple of (deleted_files, altered_files) lists as Path objects
 
         """
-        deleted_files: list[str] = []
-        altered_files: list[str] = []
-        seen_files: set[str] = set()
+        deleted_files: list[Path] = []
+        altered_files: list[Path] = []
 
         # Handle None or empty diff output
         if not diff_output:
-            return deleted_files, altered_files
-
-        # Track if we're in a modified section
-        in_modified_section = False
+            error_msg = "No diff output found"
+            self.logger.error(error_msg)
+            raise ResticBackupFailedError(error_msg)
 
         for line in diff_output.splitlines():
             line_stripped = line.strip()
             if not line_stripped:
                 continue
 
-            # Detect section headers
-            line_lower = line_stripped.lower()
-            if "modified" in line_lower or "changed" in line_lower:
-                in_modified_section = True
-                continue
-            if self._is_section_header(line_stripped):
-                in_modified_section = False
-                continue
-
-            # Try to extract deleted file
-            deleted_file = self._extract_deleted_file(line_stripped, seen_files)
-            if deleted_file:
-                deleted_files.append(deleted_file)
-                seen_files.add(deleted_file)
-                continue
-
-            # Try to extract altered file from modified line
-            if "->" in line_stripped or "B" in line_stripped or in_modified_section:
-                altered_file = self._extract_altered_file_from_modified_line(
-                    line_stripped,
-                    seen_files,
+            # Extract path from lines starting with M (modified), - (deleted), or + (added)
+            if line_stripped.startswith("-"):
+                # Deleted file
+                deleted_files.append(
+                    self._extract_file_path_from_plain_path(line_stripped),
                 )
-                if altered_file:
-                    altered_files.append(altered_file)
-                    seen_files.add(altered_file)
-                    continue
-
-            # Try to extract altered file from plain path
-            altered_file = self._extract_altered_file_from_plain_path(
-                line_stripped,
-                seen_files,
-            )
-            if altered_file:
-                altered_files.append(altered_file)
-                seen_files.add(altered_file)
+            elif line_stripped.startswith(("M", "+")):
+                # Modified or added file (both count as altered)
+                altered_files.append(
+                    self._extract_file_path_from_plain_path(line_stripped),
+                )
 
         return deleted_files, altered_files
 
     def _check_thresholds_and_send_warnings(
         self,
-        deleted_files: list[str],
-        altered_files: list[str],
+        deleted_files: list[Path],
+        altered_files: list[Path],
         snapshot_id: str,
     ) -> None:
         """Check thresholds and send warning emails if exceeded.
@@ -452,7 +383,7 @@ class BackupScript:
                 f"(threshold: {self.config.deletion_threshold})",
             )
             deleted_list = "\n".join(
-                deleted_files[: self.MAX_FILES_IN_EMAIL],
+                str(path) for path in deleted_files[: self.MAX_FILES_IN_EMAIL]
             )  # Limit to first N files
             if len(deleted_files) > self.MAX_FILES_IN_EMAIL:
                 deleted_list += f"\n... and {len(deleted_files) - self.MAX_FILES_IN_EMAIL} more files"
@@ -476,7 +407,7 @@ class BackupScript:
                 f"(threshold: {self.config.alteration_threshold})",
             )
             altered_list = "\n".join(
-                altered_files[: self.MAX_FILES_IN_EMAIL],
+                str(path) for path in altered_files[: self.MAX_FILES_IN_EMAIL]
             )  # Limit to first N files
             if len(altered_files) > self.MAX_FILES_IN_EMAIL:
                 altered_list += f"\n... and {len(altered_files) - self.MAX_FILES_IN_EMAIL} more files"
@@ -490,7 +421,7 @@ class BackupScript:
                 ),
             )
 
-    def _is_file_in_monitored_folder(self, file_path: str) -> bool:
+    def _is_file_in_monitored_folder(self, file_path: Path) -> bool:
         """Check if a file is within any of the monitored folders.
 
         Args:
@@ -504,7 +435,7 @@ class BackupScript:
             return False
 
         # Normalize the file path
-        normalized_file_path = Path(file_path).as_posix()
+        normalized_file_path = file_path.as_posix()
 
         for monitored_folder in self.config.monitored_folders:
             # Normalize the monitored folder path
@@ -521,8 +452,8 @@ class BackupScript:
 
     def _filter_files_in_monitored_folders(
         self,
-        files: list[str],
-    ) -> list[str]:
+        files: list[Path],
+    ) -> list[Path]:
         """Filter files to only include those in monitored folders.
 
         Args:
@@ -538,13 +469,64 @@ class BackupScript:
             if self._is_file_in_monitored_folder(file_path)
         ]
 
+    def _is_file_in_specific_monitored_folder(
+        self,
+        file_path: Path,
+        monitored_folder: str,
+    ) -> bool:
+        """Check if a file is within a specific monitored folder.
+
+        Args:
+            file_path: Path to the file to check
+            monitored_folder: Path to the monitored folder to check against
+
+        Returns:
+            True if the file is in the specified monitored folder, False otherwise
+
+        """
+        # Normalize the file path
+        normalized_file_path = file_path.as_posix()
+
+        # Normalize the monitored folder path
+        normalized_folder = Path(monitored_folder).as_posix()
+        # Ensure folder path ends with / for proper matching
+        if not normalized_folder.endswith("/"):
+            normalized_folder += "/"
+
+        # Check if file path starts with the monitored folder path
+        return normalized_file_path.startswith(normalized_folder)
+
+    def _filter_files_for_monitored_folder(
+        self,
+        files: list[Path],
+        monitored_folder: str,
+    ) -> list[Path]:
+        """Filter files to only include those in a specific monitored folder.
+
+        Args:
+            files: List of file paths to filter
+            monitored_folder: Path to the monitored folder to filter for
+
+        Returns:
+            List of files that are in the specified monitored folder
+
+        """
+        return [
+            file_path
+            for file_path in files
+            if self._is_file_in_specific_monitored_folder(file_path, monitored_folder)
+        ]
+
     def _check_monitored_folders_and_send_alerts(
         self,
-        deleted_files: list[str],
-        altered_files: list[str],
+        deleted_files: list[Path],
+        altered_files: list[Path],
         snapshot_id: str,
     ) -> None:
         """Check for changes in monitored folders and send email alerts.
+
+        Sends a separate email for each monitored folder containing only the files
+        that were deleted or altered in that specific folder.
 
         Args:
             deleted_files: List of deleted file paths
@@ -555,51 +537,65 @@ class BackupScript:
         if not self.config.monitored_folders:
             return
 
-        # Filter files to only those in monitored folders
-        monitored_deleted = self._filter_files_in_monitored_folders(deleted_files)
-        monitored_altered = self._filter_files_in_monitored_folders(altered_files)
-
-        # Send alert for deleted files in monitored folders
-        if monitored_deleted:
-            self.logger.warning(
-                f"Files deleted in monitored folders: {len(monitored_deleted)} files",
+        # Iterate over each monitored folder and send separate emails
+        for monitored_folder in self.config.monitored_folders:
+            # Filter files for this specific monitored folder
+            folder_deleted = self._filter_files_for_monitored_folder(
+                deleted_files,
+                monitored_folder,
             )
-            deleted_list = "\n".join(
-                monitored_deleted[: self.MAX_FILES_IN_EMAIL],
-            )
-            if len(monitored_deleted) > self.MAX_FILES_IN_EMAIL:
-                deleted_list += f"\n... and {len(monitored_deleted) - self.MAX_FILES_IN_EMAIL} more files"
-            self.encrypted_mail.send_mail_with_retries(
-                subject=f"Backup Alert: {len(monitored_deleted)} files deleted in monitored folders",
-                message=(
-                    f"Alert: The backup detected {len(monitored_deleted)} deleted files "
-                    f"in monitored folders.\n\n"
-                    f"Snapshot ID: {snapshot_id}\n\n"
-                    f"Monitored folders: {', '.join(self.config.monitored_folders)}\n\n"
-                    f"Deleted files:\n{deleted_list}"
-                ),
+            folder_altered = self._filter_files_for_monitored_folder(
+                altered_files,
+                monitored_folder,
             )
 
-        # Send alert for altered files in monitored folders
-        if monitored_altered:
-            self.logger.warning(
-                f"Files altered in monitored folders: {len(monitored_altered)} files",
-            )
-            altered_list = "\n".join(
-                monitored_altered[: self.MAX_FILES_IN_EMAIL],
-            )
-            if len(monitored_altered) > self.MAX_FILES_IN_EMAIL:
-                altered_list += f"\n... and {len(monitored_altered) - self.MAX_FILES_IN_EMAIL} more files"
-            self.encrypted_mail.send_mail_with_retries(
-                subject=f"Backup Alert: {len(monitored_altered)} files altered in monitored folders",
-                message=(
-                    f"Alert: The backup detected {len(monitored_altered)} altered files "
-                    f"in monitored folders.\n\n"
-                    f"Snapshot ID: {snapshot_id}\n\n"
-                    f"Monitored folders: {', '.join(self.config.monitored_folders)}\n\n"
-                    f"Altered files:\n{altered_list}"
-                ),
-            )
+            # Send alert for deleted files in this monitored folder
+            if folder_deleted:
+                self.logger.warning(
+                    f"Files deleted in monitored folder {monitored_folder}: "
+                    f"{len(folder_deleted)} files",
+                )
+                deleted_list = "\n".join(
+                    str(path) for path in folder_deleted[: self.MAX_FILES_IN_EMAIL]
+                )
+                if len(folder_deleted) > self.MAX_FILES_IN_EMAIL:
+                    deleted_list += f"\n... and {len(folder_deleted) - self.MAX_FILES_IN_EMAIL} more files"
+                self.encrypted_mail.send_mail_with_retries(
+                    subject=(
+                        f"Backup Alert: {len(folder_deleted)} files deleted in "
+                        f"monitored folder: {monitored_folder}"
+                    ),
+                    message=(
+                        f"Alert: The backup detected {len(folder_deleted)} deleted files "
+                        f"in monitored folder: {monitored_folder}\n\n"
+                        f"Snapshot ID: {snapshot_id}\n\n"
+                        f"Deleted files:\n{deleted_list}"
+                    ),
+                )
+
+            # Send alert for altered files in this monitored folder
+            if folder_altered:
+                self.logger.warning(
+                    f"Files altered in monitored folder {monitored_folder}: "
+                    f"{len(folder_altered)} files",
+                )
+                altered_list = "\n".join(
+                    str(path) for path in folder_altered[: self.MAX_FILES_IN_EMAIL]
+                )
+                if len(folder_altered) > self.MAX_FILES_IN_EMAIL:
+                    altered_list += f"\n... and {len(folder_altered) - self.MAX_FILES_IN_EMAIL} more files"
+                self.encrypted_mail.send_mail_with_retries(
+                    subject=(
+                        f"Backup Alert: {len(folder_altered)} files altered in "
+                        f"monitored folder: {monitored_folder}"
+                    ),
+                    message=(
+                        f"Alert: The backup detected {len(folder_altered)} altered files "
+                        f"in monitored folder: {monitored_folder}\n\n"
+                        f"Snapshot ID: {snapshot_id}\n\n"
+                        f"Altered files:\n{altered_list}"
+                    ),
+                )
 
     def _generate_diff_summary(self, snapshot_id: str) -> str:
         """Generate diff summary between current and previous snapshot."""
