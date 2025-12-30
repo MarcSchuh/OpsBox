@@ -1,0 +1,27 @@
+backup_source: /path/to/backup/source
+excluded_files:
+  - "*.tmp"
+  - "*.log"
+  - "*.cache"
+backup_target: sftp:user@host:/path/to/repo
+password_lookup_1: restic
+password_lookup_2: password
+email_settings_path: /path/to/email_settings.json
+file_to_check: important_file.txt
+default_user: backup_user
+keep_last: "10"
+keep_daily: "21"
+keep_monthly: "5"
+ssh_key_max_retries: 12
+detailed_report: true
+network_host: null
+ssh_key: null
+ssh_user: null
+restic_password: null
+user_id: null
+deletion_threshold: null # Send warning email if more than this many files are deleted (null to disable)
+alteration_threshold: null # Send warning email if more than this many files are altered (null to disable)
+monitored_folders: [] # List of folders to monitor for changes (empty list to disable)
+  # Example:
+  # - /path/to/important/folder
+  # - /another/monitored/path

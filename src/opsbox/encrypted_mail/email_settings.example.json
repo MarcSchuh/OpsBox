@@ -1,0 +1,13 @@
+{
+  "sender": "alerts@example.com",
+  "recipient": "admin@example.com",
+  "password_lookup_1": "email",
+  "password_lookup_2": "password",
+  "host": "smtp.gmail.com",
+  "port": 587,
+  "user": "alerts@example.com",
+  "security": "starttls",
+  "gpg_key_id": "YourGPGKeyID",
+  "default_user": "opsbox",
+  "password": null
+}
