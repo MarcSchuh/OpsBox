@@ -568,8 +568,7 @@ def main() -> None:
             logger.info("Database Backup Script finished successfully.")
 
         sys.exit(0)
-
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.critical(
             f"An unexpected critical error occurred: {e}",
             exc_info=True,
