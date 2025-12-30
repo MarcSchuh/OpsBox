@@ -11,3 +11,7 @@ class LockAlreadyTakenError(Exception):
 
 class MissingEnvVariableError(Exception):
     """Exception raised when a required environment variable is missing."""
+
+
+class RsyncError(Exception):
+    """Exception raised when rsync operations fail."""

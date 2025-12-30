@@ -1,0 +1,44 @@
+# Example configuration for rsync-manager
+# Copy this file and adjust the values for your environment
+
+# Required: Target directory where rsync will store files locally
+rsync_target: "/path/to/where/you/want/to/sync/to"
+
+# Required: Source directory where rsync will read files from
+rsync_source: "user@host:/path/to/where/you/want/to/sync/from"
+
+# Required: Path to email settings file (JSON or YAML)
+email_settings_path: "/path/to/your/email_settings.yaml"
+
+# Optional: Path to log file (defaults to temp directory)
+log_file: "/path/to/your/rsync.log"
+
+# Optional: Maximum number of rsync retry attempts (default: 3)
+rsync_retry_max: 3
+
+# Optional: Delay between retry attempts in seconds (default: 5)
+rsync_retry_delay: 5
+
+# Optional: Minimum number of files/directories required to consider mount accessible (default: 10)
+mount_check_threshold: 10
+
+# Optional: SSH key fingerprint to ensure is loaded (required if network_host is set)
+ssh_key: null # e.g., "SHA256:..."
+
+# Optional: SSH user for key management (required if ssh_key is set)
+ssh_user: null # e.g., "user"
+
+# Optional: Network host to check connectivity (required if ssh_key is set)
+network_host: null # e.g., "host.example.com"
+
+# Optional: Default user for operations (defaults to current user)
+default_user: "marc"
+
+# Optional: Rsync-specific options
+rsync_options:
+  # Change ownership of files (format: user:group)
+  chown: "marc:marc"
+  # Delete files in destination that don't exist in source
+  delete: true
+  # Show progress during transfer
+  progress: true
