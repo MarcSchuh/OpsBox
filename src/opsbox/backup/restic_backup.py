@@ -609,7 +609,10 @@ class BackupScript:
                 return "Not enough snapshots to generate diff summary."
 
             # Get the previous snapshot (second to last)
-            previous_snapshot = snapshots[-2]
+            if snapshots[-2] != snapshot_id:
+                error_msg = f"Here I was expecting to find the current snapshot, but I found something else. Expected: {snapshot_id}, Found: {snapshots[-2]}"
+                raise SnapshotIDNotFoundError(error_msg)
+            previous_snapshot = snapshots[-3]
 
             diff_output = self.restic_client.diff(previous_snapshot, snapshot_id)
 

@@ -246,7 +246,7 @@ class ResticClient:
         if result.returncode != 0:
             error_msg = "Failed to get diff between snapshots"
             raise ResticCommandFailedError(error_msg)
-
+        self.logger.info(f"Diff output: {result.stdout}")
         return result.stdout
 
     def find(self, file_pattern: str, snapshot_id: str) -> str:
