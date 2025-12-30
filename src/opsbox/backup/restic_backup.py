@@ -673,13 +673,15 @@ class BackupScript:
                 self.logger.info("Backup verification successful")
                 self.encrypted_mail.send_mail_with_retries(
                     subject="Backup verification successful",
-                    message=f"Backup verification successful for snapshot {snapshot_id}",
+                    message=f"Backup verification successful for snapshot {snapshot_id}. File {self.config.file_to_check} found.",
                 )
                 return True
-            self.logger.error("Backup verification failed - file not found")
+            self.logger.error(
+                f"Backup verification failed - file {self.config.file_to_check} not found",
+            )
             self.encrypted_mail.send_mail_with_retries(
                 subject="Backup verification failed",
-                message=f"Backup verification failed for snapshot {snapshot_id} - file not found",
+                message=f"Backup verification failed for snapshot {snapshot_id} - file {self.config.file_to_check} not found",
             )
             return False  # noqa: TRY300
 
