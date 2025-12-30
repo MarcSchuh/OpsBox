@@ -7,3 +7,7 @@ class EmailSettingsNotFoundError(Exception):
 
 class LockAlreadyTakenError(Exception):
     """Exception raised when a lock is already taken by another process."""
+
+
+class MissingEnvVariableError(Exception):
+    """Exception raised when a required environment variable is missing."""
