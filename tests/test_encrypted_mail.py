@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
+import yaml
 
 from opsbox.encrypted_mail.encrypted_mail import (
     EncryptedMail,
@@ -73,7 +74,7 @@ class TestLoadEmailSettings:
             temp_path = f.name
 
         try:
-            settings = EncryptedMail.load_email_settings(temp_path)
+            settings = EncryptedMail.load_email_settings(Path(temp_path))
             assert isinstance(settings, MailSettings)
             assert settings.sender == "test@example.com"
             assert settings.recipient == "recipient@example.com"
@@ -103,7 +104,7 @@ class TestLoadEmailSettings:
             temp_path = f.name
 
         try:
-            settings = EncryptedMail.load_email_settings(temp_path)
+            settings = EncryptedMail.load_email_settings(Path(temp_path))
             assert settings.password is None
         finally:
             Path(temp_path).unlink()
@@ -114,7 +115,7 @@ class TestLoadEmailSettings:
             EmailSettingsNotFoundError,
             match="email_settings_path not specified",
         ):
-            EncryptedMail.load_email_settings("")
+            EncryptedMail.load_email_settings(Path())
 
     def test_load_email_settings_none_path(self) -> None:
         """Test loading email settings with None path."""
@@ -122,7 +123,7 @@ class TestLoadEmailSettings:
             EmailSettingsNotFoundError,
             match="email_settings_path not specified",
         ):
-            EncryptedMail.load_email_settings(None)  # type: ignore[arg-type]
+            EncryptedMail.load_email_settings(Path())  # Empty path for None case
 
     def test_load_email_settings_file_not_found(self) -> None:
         """Test loading email settings from non-existent file."""
@@ -130,7 +131,7 @@ class TestLoadEmailSettings:
             EmailSettingsNotFoundError,
             match="Email settings file not found",
         ):
-            EncryptedMail.load_email_settings("/nonexistent/path/settings.json")
+            EncryptedMail.load_email_settings(Path("/nonexistent/path/settings.json"))
 
     def test_load_email_settings_invalid_json(self) -> None:
         """Test loading email settings with invalid JSON."""
@@ -139,8 +140,11 @@ class TestLoadEmailSettings:
             temp_path = f.name
 
         try:
-            with pytest.raises(EmailSettingsNotFoundError, match="Invalid JSON"):
-                EncryptedMail.load_email_settings(temp_path)
+            with pytest.raises(
+                EmailSettingsNotFoundError,
+                match="Invalid configuration",
+            ):
+                EncryptedMail.load_email_settings(Path(temp_path))
         finally:
             Path(temp_path).unlink()
 
@@ -168,7 +172,7 @@ class TestLoadEmailSettings:
                 EmailSettingsNotFoundError,
                 match="Missing required configuration key",
             ):
-                EncryptedMail.load_email_settings(temp_path)
+                EncryptedMail.load_email_settings(Path(temp_path))
         finally:
             Path(temp_path).unlink()
 
@@ -193,8 +197,94 @@ class TestLoadEmailSettings:
 
         try:
             # This should work as JSON loads strings, but the dataclass will handle type conversion
-            settings = EncryptedMail.load_email_settings(temp_path)
+            settings = EncryptedMail.load_email_settings(Path(temp_path))
             assert settings.port == "587"  # Will be string from JSON
+        finally:
+            Path(temp_path).unlink()
+
+    def test_load_email_settings_yaml_config(self) -> None:
+        """Test loading email settings from YAML file."""
+        config_data = {
+            "sender": "test@example.com",
+            "recipient": "recipient@example.com",
+            "password_lookup_1": "service",
+            "password_lookup_2": "username",
+            "host": "smtp.example.com",
+            "port": 587,
+            "user": "testuser",
+            "security": "starttls",
+            "gpg_key_id": "test-key-id",
+            "default_user": "testuser",
+            "password": "testpassword",
+        }
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            yaml.dump(config_data, f)
+            temp_path = f.name
+
+        try:
+            settings = EncryptedMail.load_email_settings(Path(temp_path))
+            assert isinstance(settings, MailSettings)
+            assert settings.sender == "test@example.com"
+            assert settings.recipient == "recipient@example.com"
+            assert settings.host == "smtp.example.com"
+            assert settings.port == 587
+            assert settings.password == "testpassword"
+        finally:
+            Path(temp_path).unlink()
+
+    def test_load_email_settings_yml_extension(self) -> None:
+        """Test loading email settings from .yml file."""
+        config_data = {
+            "sender": "test@example.com",
+            "recipient": "recipient@example.com",
+            "password_lookup_1": "service",
+            "password_lookup_2": "username",
+            "host": "smtp.example.com",
+            "port": 587,
+            "user": "testuser",
+            "security": "starttls",
+            "gpg_key_id": "test-key-id",
+            "default_user": "testuser",
+            "password": None,
+        }
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
+            yaml.dump(config_data, f)
+            temp_path = f.name
+
+        try:
+            settings = EncryptedMail.load_email_settings(Path(temp_path))
+            assert isinstance(settings, MailSettings)
+            assert settings.sender == "test@example.com"
+            assert settings.password is None
+        finally:
+            Path(temp_path).unlink()
+
+    def test_load_email_settings_auto_detect_json(self) -> None:
+        """Test auto-detection of JSON format when extension is missing."""
+        config_data = {
+            "sender": "test@example.com",
+            "recipient": "recipient@example.com",
+            "password_lookup_1": "service",
+            "password_lookup_2": "username",
+            "host": "smtp.example.com",
+            "port": 587,
+            "user": "testuser",
+            "security": "starttls",
+            "gpg_key_id": "test-key-id",
+            "default_user": "testuser",
+            "password": "testpassword",
+        }
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+            json.dump(config_data, f)
+            temp_path = f.name
+
+        try:
+            settings = EncryptedMail.load_email_settings(Path(temp_path))
+            assert isinstance(settings, MailSettings)
+            assert settings.sender == "test@example.com"
         finally:
             Path(temp_path).unlink()
 
@@ -224,7 +314,7 @@ class TestEncryptedMailInitialization:
             temp_path = f.name
 
         try:
-            encrypted_mail = EncryptedMail(logger, temp_path)
+            encrypted_mail = EncryptedMail(logger, Path(temp_path))
             assert encrypted_mail.logger == logger
             assert encrypted_mail.mail_settings.sender == "test@example.com"
             assert encrypted_mail.fail_silently is False
@@ -253,7 +343,7 @@ class TestEncryptedMailInitialization:
             temp_path = f.name
 
         try:
-            encrypted_mail = EncryptedMail(logger, temp_path, fail_silently=True)
+            encrypted_mail = EncryptedMail(logger, Path(temp_path), fail_silently=True)
             assert encrypted_mail.fail_silently is True
         finally:
             Path(temp_path).unlink()
@@ -263,7 +353,7 @@ class TestEncryptedMailInitialization:
         logger = Mock(spec=logging.Logger)
 
         with pytest.raises(EmailSettingsNotFoundError):
-            EncryptedMail(logger, "/nonexistent/path/settings.json")
+            EncryptedMail(logger, Path("/nonexistent/path/settings.json"))
 
 
 class TestEncryptedMailSendEmail:

@@ -11,6 +11,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+import yaml
 from envelope import Envelope
 
 from opsbox.exceptions import EmailSettingsNotFoundError
@@ -45,14 +46,14 @@ class EncryptedMail:
     def __init__(
         self,
         logger: logging.Logger,
-        email_settings_path: str,
+        email_settings_path: Path,
         fail_silently: bool = False,
     ) -> None:
         """Initialize the EncryptedMail instance.
 
         Args:
             logger: Logger instance for logging operations
-            email_settings_path: Path to the email settings JSON file
+            email_settings_path: Path to the email settings JSON or YAML file
             fail_silently: If True, don't raise exceptions on send failures
 
         """
@@ -210,11 +211,11 @@ class EncryptedMail:
                     self.logger.info(f"Starting attempt {attempt + 1}")
 
     @staticmethod
-    def load_email_settings(path_to_mail_settings: str) -> MailSettings:
-        """Load email settings from JSON configuration file.
+    def load_email_settings(path_to_mail_settings: Path) -> MailSettings:
+        """Load email settings from JSON or YAML configuration file.
 
         Args:
-            path_to_mail_settings: Path to the JSON configuration file
+            path_to_mail_settings: Path to the JSON or YAML configuration file
 
         Returns:
             MailSettings object with loaded configuration
@@ -222,22 +223,34 @@ class EncryptedMail:
         Raises:
             EMailSettingsNotFound: If path is empty or file not found
             json.JSONDecodeError: If JSON is invalid
+            yaml.YAMLError: If YAML is invalid
             KeyError: If required configuration keys are missing
 
         """
-        if not path_to_mail_settings:
-            error_msg = "email_settings_path not specified in configuration."
+        if not path_to_mail_settings.exists():
+            error_msg = f"Email settings file not found: {path_to_mail_settings}"
             raise EmailSettingsNotFoundError(error_msg)
 
+        file_extension = path_to_mail_settings.suffix.lower()
+
         try:
-            with Path(path_to_mail_settings).open(encoding="utf-8") as file:
-                config = json.loads(file.read())
-        except FileNotFoundError as e:
-            error_msg = f"Email settings file not found: {path_to_mail_settings}"
-            raise EmailSettingsNotFoundError(error_msg) from e
-        except json.JSONDecodeError as e:
-            error_msg = f"Invalid JSON in email settings file: {e}"
-            raise EmailSettingsNotFoundError(error_msg) from e
+            with path_to_mail_settings.open(encoding="utf-8") as file:
+                if file_extension in (".yaml", ".yml"):
+                    config = yaml.safe_load(file.read())
+                elif file_extension == ".json":
+                    config = json.loads(file.read())
+                else:
+                    # Try to auto-detect by reading first few bytes
+                    file.seek(0)
+                    first_chars = file.read(10).strip()
+                    file.seek(0)
+                    if first_chars.startswith("{"):
+                        config = json.loads(file.read())
+                    else:
+                        config = yaml.safe_load(file.read())
+        except Exception as e:
+            error_msg = f"Error loading email settings: {e}"
+            raise ValueError(error_msg) from e
 
         try:
             mail_settings = MailSettings(
@@ -319,7 +332,7 @@ def main() -> None:
         "--email-settings",
         type=str,
         required=True,
-        help="Path to email settings JSON file",
+        help="Path to email settings JSON or YAML file",
     )
     parser.add_argument("--subject", type=str, required=True, help="Email subject line")
     parser.add_argument("--message", type=str, required=True, help="Email message body")
@@ -335,7 +348,7 @@ def main() -> None:
         logging_config = LoggingConfig(log_name="encrypted_mail")
         log_handler = configure_logging(logging_config)
 
-        encrypted_mail = EncryptedMail(log_handler, args.email_settings)
+        encrypted_mail = EncryptedMail(log_handler, Path(args.email_settings))
         attachment = args.attachment if args.attachment else None
         encrypted_mail.send_mail_with_retries(args.subject, args.message, attachment)
 

@@ -91,7 +91,7 @@ class BackupScript:
         # Initialize email and locking
         self.encrypted_mail = EncryptedMail(
             self.logger,
-            self.config.email_settings_path,
+            Path(self.config.email_settings_path),
             fail_silently=True,
         )
 
