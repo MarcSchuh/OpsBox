@@ -227,7 +227,7 @@ class EncryptedMail:
             KeyError: If required configuration keys are missing
 
         """
-        if not path_to_mail_settings.exists():
+        if not path_to_mail_settings.exists() or not path_to_mail_settings.is_file():
             error_msg = f"Email settings file not found: {path_to_mail_settings}"
             raise EmailSettingsNotFoundError(error_msg)
 

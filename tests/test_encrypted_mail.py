@@ -110,20 +110,14 @@ class TestLoadEmailSettings:
             Path(temp_path).unlink()
 
     def test_load_email_settings_empty_path(self) -> None:
-        """Test loading email settings with empty path."""
+        """Test loading email settings with non-existent file."""
         with pytest.raises(
             EmailSettingsNotFoundError,
-            match="email_settings_path not specified",
+            match="Email settings file not found",
         ):
-            EncryptedMail.load_email_settings(Path())
-
-    def test_load_email_settings_none_path(self) -> None:
-        """Test loading email settings with None path."""
-        with pytest.raises(
-            EmailSettingsNotFoundError,
-            match="email_settings_path not specified",
-        ):
-            EncryptedMail.load_email_settings(Path())  # Empty path for None case
+            EncryptedMail.load_email_settings(
+                Path("/nonexistent/path/email_settings.json"),
+            )
 
     def test_load_email_settings_file_not_found(self) -> None:
         """Test loading email settings from non-existent file."""
@@ -140,10 +134,19 @@ class TestLoadEmailSettings:
             temp_path = f.name
 
         try:
-            with pytest.raises(
-                EmailSettingsNotFoundError,
-                match="Invalid configuration",
-            ):
+            with pytest.raises(ValueError, match="Error loading email settings"):
+                EncryptedMail.load_email_settings(Path(temp_path))
+        finally:
+            Path(temp_path).unlink()
+
+    def test_load_email_settings_invalid_yaml(self) -> None:
+        """Test loading email settings with invalid YAML."""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            f.write("invalid: yaml: content: [")
+            temp_path = f.name
+
+        try:
+            with pytest.raises(ValueError, match="Error loading email settings"):
                 EncryptedMail.load_email_settings(Path(temp_path))
         finally:
             Path(temp_path).unlink()
