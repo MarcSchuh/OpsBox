@@ -409,7 +409,7 @@ class DBBackup:
                 f"Metrics recorded: duration={self.metrics['duration_seconds']:.2f}s, "
                 f"size={self.metrics['file_size_bytes']} bytes",
             )
-        except Exception as e:  # noqa: BLE001
+        except OSError as e:
             self.logger.warning(f"Failed to record metrics: {e}")
             # Non-critical error, don't raise
 
