@@ -292,10 +292,11 @@ class RsyncManager:
         if result.returncode == 0:
             self.logger.info("Rsync completed successfully")
             return
-        self.logger.warning(
+        self.logger.error(
             f"Rsync failed with exit code {result.returncode}. "
             f"Stderr: {result.stderr[:500] if result.stderr else 'None'}",
         )
+        raise RsyncError
 
     def _execute_rsync(self) -> None:
         """Execute rsync with retry logic.
