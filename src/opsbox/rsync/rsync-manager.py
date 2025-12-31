@@ -2,11 +2,13 @@
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 import tempfile
 import time
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +26,31 @@ from opsbox.encrypted_mail import EncryptedMail
 from opsbox.exceptions import LockAlreadyTakenError, RsyncError
 from opsbox.locking import LockManager
 from opsbox.logging import LoggingConfig, configure_logging
+
+
+class Constants(Enum):
+    """Constants used throughout the rsync manager."""
+
+    BYTES_PER_KB = 1024.0
+    SECONDS_PER_MINUTE = 60
+    SECONDS_PER_HOUR = 3600
+
+
+class StatType(Enum):
+    """Enumeration for rsync statistic types."""
+
+    SENT = "sent"
+    RECEIVED = "received"
+    TOTAL_SIZE = "total_size"
+
+
+@dataclass
+class RsyncStats:
+    """Statistics from an rsync operation."""
+
+    sent: int
+    received: int
+    total_size: int
 
 
 @dataclass
@@ -145,6 +172,7 @@ class RsyncManager:
         self.ssh_manager = SSHManager(self.logger)
 
         self.logger.info("Rsync manager initialized successfully")
+        self.max_log_lines = 100
 
     @staticmethod
     def _load_config(config_path: Path) -> RsyncConfig:
@@ -269,6 +297,155 @@ class RsyncManager:
 
         return cmd
 
+    @staticmethod
+    def _format_bytes(bytes_value: int | None) -> str:
+        """Format bytes in human-readable format.
+
+        Args:
+            bytes_value: Number of bytes to format, or None
+
+        Returns:
+            Human-readable string (e.g., "1.5 GB") or "N/A" if None
+
+        """
+        if bytes_value is None:
+            return "N/A"
+
+        value = float(bytes_value)
+        for unit in ["B", "KB", "MB", "GB", "TB", "PB"]:
+            if value < Constants.BYTES_PER_KB.value:
+                return f"{value:.2f} {unit}"
+            value /= Constants.BYTES_PER_KB.value
+        return f"{value:.2f} PB"
+
+    @staticmethod
+    def _parse_number_with_dots(number_str: str) -> int:
+        """Parse a number string that may contain dots as thousand separators.
+
+        Args:
+            number_str: Number string (e.g., "35.821.870" or "552313")
+
+        Returns:
+            Integer value
+
+        """
+        # Remove dots and convert to int
+        cleaned = number_str.replace(".", "").replace(",", "")
+        return int(cleaned)
+
+    def _parse_rsync_log_stats(self) -> RsyncStats:
+        """Parse rsync log file to extract statistics.
+
+        Returns:
+            RsyncStats object with sent, received, and total_size values
+
+        """
+        # Buffer values in local variables (use None as sentinel for "not found")
+        sent: int | None = None
+        received: int | None = None
+        total_size: int | None = None
+
+        if not self.log_file_path.exists():
+            self.logger.warning(f"Log file not found: {self.log_file_path}")
+            return RsyncStats(sent=0, received=0, total_size=0)
+
+        try:
+            with self.log_file_path.open(encoding="utf-8") as f:
+                lines = f.readlines()
+
+            lines_to_process = (
+                lines[-self.max_log_lines :]
+                if len(lines) >= self.max_log_lines
+                else lines
+            )
+            for line in reversed(lines_to_process):
+                # Match: sent X bytes  received Y bytes
+                sent_match = re.search(r"sent\s+([\d.,]+)\s+bytes", line)
+                received_match = re.search(r"received\s+([\d.,]+)\s+bytes", line)
+                # Match: total size is X
+                total_match = re.search(r"total size is\s+([\d.,]+)", line)
+
+                if sent_match and sent is None:
+                    sent = self._parse_number_with_dots(sent_match.group(1))
+                if received_match and received is None:
+                    received = self._parse_number_with_dots(received_match.group(1))
+                if total_match and total_size is None:
+                    total_size = self._parse_number_with_dots(total_match.group(1))
+
+                # If we found all stats, we can break early
+                if sent is not None and received is not None and total_size is not None:
+                    break
+
+        except Exception as e:
+            self.logger.warning(f"Error parsing rsync log: {e}")
+
+        # Convert None to 0 and create the object at the end
+        return RsyncStats(
+            sent=sent if sent is not None else 0,
+            received=received if received is not None else 0,
+            total_size=total_size if total_size is not None else 0,
+        )
+
+    def _check_log_for_errors(self) -> bool:
+        """Check the last 10 lines of the log file for errors.
+
+        Returns:
+            True if errors are found, False otherwise
+
+        """
+        if not self.log_file_path.exists():
+            return False
+
+        try:
+            with self.log_file_path.open(encoding="utf-8") as f:
+                lines = f.readlines()
+
+            last_lines = (
+                lines[-self.max_log_lines :]
+                if len(lines) >= self.max_log_lines
+                else lines
+            )
+
+            # Check for common error patterns
+            error_patterns = [
+                r"error",
+                r"failed",
+                r"fatal",
+                r"permission denied",
+                r"connection refused",
+                r"timeout",
+                r"no such file",
+            ]
+
+            for line in last_lines:
+                line_lower = line.lower()
+                for pattern in error_patterns:
+                    if re.search(pattern, line_lower):
+                        return True
+
+        except Exception as e:
+            self.logger.warning(f"Error checking log for errors: {e}")
+
+        return False
+
+    def _format_duration(self, seconds: float) -> str:
+        """Format duration in human-readable format.
+
+        Args:
+            seconds: Duration in seconds
+
+        Returns:
+            Human-readable duration string
+
+        """
+        if seconds < Constants.SECONDS_PER_MINUTE.value:
+            return f"{seconds:.2f} seconds"
+        if seconds < Constants.SECONDS_PER_HOUR.value:
+            minutes = seconds / Constants.SECONDS_PER_MINUTE.value
+            return f"{minutes:.2f} minutes"
+        hours = seconds / Constants.SECONDS_PER_HOUR.value
+        return f"{hours:.2f} hours"
+
     def _run_rsync_attempt(self, cmd: list[str]) -> None:
         """Run a single rsync attempt.
 
@@ -299,7 +476,7 @@ class RsyncManager:
         raise RsyncError
 
     def _execute_rsync(self) -> None:
-        """Execute rsync with retry logic.
+        """Execute rsync with retry logic and send summary email.
 
         Returns:
             True if rsync succeeded, False otherwise
@@ -308,11 +485,14 @@ class RsyncManager:
         self.logger.info("Starting rsync operation")
 
         cmd = self._build_rsync_command()
+        start_time = time.time()
 
         # Retry loop
         success = False
+        num_attempts = 0
         for attempt in range(1, self.config.rsync_retry_max + 1):
             self.logger.info(f"Rsync attempt {attempt}/{self.config.rsync_retry_max}")
+            num_attempts = attempt
 
             try:
                 self._run_rsync_attempt(cmd)
@@ -327,14 +507,59 @@ class RsyncManager:
                 )
                 time.sleep(self.config.rsync_retry_delay)
 
+        # Calculate execution time
+        execution_time = time.time() - start_time
+
+        # Parse log statistics
+        stats = self._parse_rsync_log_stats()
+
+        # Check for errors in last 10 lines
+        has_errors = self._check_log_for_errors()
+
+        # Build email message
+        message_lines = [
+            f"Rsync operation completed for script: {self.script_name}",
+            "",
+            "Summary:",
+            f"  Number of attempts: {num_attempts}",
+            f"  Execution time: {self._format_duration(execution_time)}",
+            f"  Bytes sent: {self._format_bytes(stats.sent)}",
+            f"  Bytes received: {self._format_bytes(stats.received)}",
+            f"  Total size: {self._format_bytes(stats.total_size)}",
+            "",
+        ]
+
+        if not success:
+            message_lines.append(f"Status: FAILED after {num_attempts} attempts")
+        else:
+            message_lines.append("Status: SUCCESS")
+
+        if has_errors:
+            message_lines.append("")
+            message_lines.append(
+                "WARNING: Errors detected in the last 10 lines of the log file.",
+            )
+
+        message = "\n".join(message_lines)
+
+        # Build subject
+        subject_prefix = "Error: " if not success or has_errors else ""
+
+        subject = f"{subject_prefix}Rsync backup summary - {self.script_name}"
+
+        # Send email
+        try:
+            self.encrypted_mail.send_mail_with_retries(
+                subject=subject,
+                message=message,
+                mail_attachment=str(self.log_file_path),
+            )
+        except Exception as e:
+            self.logger.warning(f"Failed to send summary email: {e}")
+
         if not success:
             error_msg = f"Rsync failed after {self.config.rsync_retry_max} attempts"
             self.logger.error(error_msg)
-            self.encrypted_mail.send_mail_with_retries(
-                subject=f"Rsync backup failed after {self.config.rsync_retry_max} attempts",
-                message=f"Script {self.script_name} encountered an rsync error after {self.config.rsync_retry_max} attempts. See attached log.",
-                mail_attachment=str(self.log_file_path),
-            )
             raise RsyncError(error_msg)
 
     def run(self) -> None:
