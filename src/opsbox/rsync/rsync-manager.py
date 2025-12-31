@@ -172,7 +172,7 @@ class RsyncManager:
         self.ssh_manager = SSHManager(self.logger)
 
         self.logger.info("Rsync manager initialized successfully")
-        self.max_log_lines = 100
+        self.max_log_lines = 30
 
     @staticmethod
     def _load_config(config_path: Path) -> RsyncConfig:
@@ -386,6 +386,20 @@ class RsyncManager:
             total_size=total_size if total_size is not None else 0,
         )
 
+    def _get_last_log_lines(self, num_lines: int) -> list[str]:
+        """Get the last num_lines lines from the log file.
+
+        Args:
+            num_lines: Number of lines to retrieve
+        Returns:
+            List of last log lines
+
+        """
+        with self.log_file_path.open(encoding="utf-8") as f:
+            lines = f.readlines()
+
+        return lines[-num_lines:] if len(lines) >= num_lines else lines
+
     def _check_log_for_errors(self) -> bool:
         """Check the last 10 lines of the log file for errors.
 
@@ -397,15 +411,6 @@ class RsyncManager:
             return False
 
         try:
-            with self.log_file_path.open(encoding="utf-8") as f:
-                lines = f.readlines()
-
-            last_lines = (
-                lines[-self.max_log_lines :]
-                if len(lines) >= self.max_log_lines
-                else lines
-            )
-
             # Check for common error patterns
             error_patterns = [
                 r"error",
@@ -417,7 +422,7 @@ class RsyncManager:
                 r"no such file",
             ]
 
-            for line in last_lines:
+            for line in self._get_last_log_lines(self.max_log_lines):
                 line_lower = line.lower()
                 for pattern in error_patterns:
                     if re.search(pattern, line_lower):
@@ -537,8 +542,12 @@ class RsyncManager:
         if has_errors:
             message_lines.append("")
             message_lines.append(
-                "WARNING: Errors detected in the last 10 lines of the log file.",
+                f"WARNING: Errors detected in the last {self.max_log_lines} lines of the log file.",
             )
+        message_lines.append("")
+        message_lines.append("------------------")
+        message_lines.append("The last log lines were:")
+        message_lines.extend(self._get_last_log_lines(self.max_log_lines))
 
         message = "\n".join(message_lines)
 
