@@ -1,7 +1,6 @@
 """Common utility functions for server operations."""
 
 import platform
-from pathlib import Path
 from typing import Any
 
 
@@ -20,19 +19,3 @@ def get_system_info() -> dict[str, Any]:
         "processor": platform.processor(),
         "python_version": platform.python_version(),
     }
-
-
-def validate_path(path: Path, *, must_exist: bool = False) -> bool:
-    """Validate a file or directory path.
-
-    Args:
-    ----
-        path: Path to validate
-        must_exist: Whether the path must exist
-
-    Returns:
-    -------
-        True if path is valid, False otherwise
-
-    """
-    return path.exists() if must_exist else True
