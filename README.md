@@ -48,3 +48,13 @@ Run Restic backup operations:
     --restic-path /snap/bin/restic \
     --log-level INFO
 ```
+
+### check_mails
+
+Check for expected emails in IMAP mailbox:
+
+```bash
+./dist/check_mails \
+    --config /path/to/config.yaml \
+    --log-level INFO
+```
