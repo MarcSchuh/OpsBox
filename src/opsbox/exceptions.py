@@ -15,3 +15,15 @@ class MissingEnvVariableError(Exception):
 
 class RsyncError(Exception):
     """Exception raised when rsync operations fail."""
+
+
+class EmailSearchError(Exception):
+    """Exception raised when email search operations fail."""
+
+
+class EmailDeleteError(Exception):
+    """Exception raised when email deletion operations fail."""
+
+
+class EmailConnectionError(Exception):
+    """Exception raised when email connection operations fail."""

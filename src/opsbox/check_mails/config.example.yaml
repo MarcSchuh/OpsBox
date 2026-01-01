@@ -1,0 +1,22 @@
+# Example configuration for check_mails
+# Copy this file and adjust the values for your environment
+
+# Required: Path to email settings file (JSON or YAML)
+# This should be the same format as encrypted_mail email_settings
+email_settings_path: "/path/to/your/email_settings.yaml"
+
+# Required: IMAP folder/mailbox to check (e.g., "inbox", "server", "Archive")
+imap_folder: "server"
+
+# Required: List of email searches to perform
+searches:
+  - subject: "Errorlog found for backup.."
+    days_in_past: 1
+    number_of_occurrences: 1
+    match_any: false
+
+# Optional: Email deletion settings
+delete_old_emails:
+  enabled: false
+  older_than_days: 30
+  folder: "inbox" # Folder to delete from (defaults to inbox)
