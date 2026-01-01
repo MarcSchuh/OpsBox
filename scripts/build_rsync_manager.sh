@@ -37,7 +37,7 @@ uv run pyinstaller --onefile \
     --exclude-module opsbox.utils \
     --strip \
     --upx-dir=/usr/bin \
-    src/opsbox/rsync/rsync-manager.py
+    src/opsbox/rsync/rsync_manager.py
 
 # Check if build was successful
 if [ -f "dist/rsync_manager" ]; then
