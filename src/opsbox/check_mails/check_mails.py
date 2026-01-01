@@ -23,6 +23,7 @@ from opsbox.exceptions import (
 )
 from opsbox.locking import LockManager
 from opsbox.logging import LoggingConfig, configure_logging
+from opsbox.notifier import NotificationSender
 
 
 @dataclass
@@ -397,6 +398,12 @@ def main() -> None:
         default="INFO",
         help="Logging level (default: INFO)",
     )
+    parser.add_argument(
+        "--notification-username",
+        type=str,
+        default=None,
+        help="Username for desktop notifications (required when running as root)",
+    )
     args = parser.parse_args()
 
     logging_config = LoggingConfig(log_name="check_mails", log_level=args.log_level)
@@ -408,18 +415,12 @@ def main() -> None:
     email_settings = EncryptedMail.load_email_settings(Path(config.email_settings_path))
     logger.info("Loaded email settings")
 
-    encrypted_mail = EncryptedMail(
-        logger,
-        Path(config.email_settings_path),
-        fail_silently=True,
-    )
-
     script_name = Path(__file__).name
     lock_file_path = Path(tempfile.gettempdir()) / f"{script_name}.lock"
     lock_manager = LockManager(
         lock_file=lock_file_path,
         logger=logger,
-        encrypted_mail=encrypted_mail,
+        encrypted_mail=None,
         script_name=script_name,
     )
 
@@ -465,19 +466,20 @@ def main() -> None:
 
         # Send notification if problems found
         if number_of_problems > 0:
-            error_message = (
-                f"Problems finding expected emails!\n\n"
-                f"Failed searches ({number_of_problems}):\n"
-                + "\n".join(f"  - {subject}" for subject in failed_searches)
+            error_summary = f"Email Check Failed ({number_of_problems} problem{'s' if number_of_problems > 1 else ''})"
+            error_body = "Failed searches:\n" + "\n".join(
+                f"  • {subject}" for subject in failed_searches
             )
             try:
-                encrypted_mail.send_mail_with_retries(
-                    subject="Problems finding all searched mails!",
-                    message=error_message,
+                notifier = NotificationSender(logger)
+                notifier.send_notification(
+                    summary=error_summary,
+                    body=error_body,
+                    username=args.notification_username,
                 )
-                logger.info("Notification email sent")
+                logger.info("Desktop notification sent")
             except Exception:
-                logger.exception("Failed to send notification email")
+                logger.exception("Failed to send desktop notification")
 
             logger.error("Check not successful!")
             sys.exit(1)
