@@ -80,7 +80,7 @@ indent-style = "space"
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
-"tests/**/*" = ["S101", "S105", "S106", "PLR0913", "ANN001", "ANN003", "PLR2004", "SIM117", "ARG001", "ARG002"]
+"tests/**/*" = ["S101", "S105", "S106", "S108", "PLR0913", "ANN001", "ANN003", "PLR2004", "SIM117", "ARG001", "ARG002", "SLF001"]
 "src/opsbox/db_snapshot/db_backup.py" = ["BLE001"]
 "src/opsbox/rsync/rsync-manager.py" = ["BLE001", "N999"]
 
