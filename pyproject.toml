@@ -103,6 +103,10 @@ disallow_untyped_defs = false
 module = "envelope"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = "dbus.*"
+ignore_missing_imports = true
+
 # Pytest configuration
 [tool.pytest.ini_options]
 testpaths = ["tests"]
