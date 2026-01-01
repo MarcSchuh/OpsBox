@@ -78,10 +78,7 @@ class DBBackup:
         # Ensure backup directory exists
         self._ensure_backup_dir()
 
-        self.script_name = Path(__file__).name  # Get the script name
-        self.script_identifier = (
-            f"{self.script_name}_{self.container_name}_{self.db_name}"
-        )
+        self.script_identifier = f"db_backup_{self.container_name}_{self.db_name}"
 
         self.logger.info(
             f"Backup configured for database '{self.db_name}' using user '{self.db_user}'.",
@@ -93,7 +90,7 @@ class DBBackup:
             lock_file=self.lock_file_path,
             logger=self.logger,
             encrypted_mail=self.email_client,
-            script_name=self.script_name,
+            script_name=self.script_identifier,
         )
 
         if self.dry_run:
