@@ -14,7 +14,7 @@ fi
 
 # Clean previous builds
 echo "Cleaning previous builds..."
-rm -rf build/rsync_manager dist/ __pycache__/ *.spec
+rm -rf build/ dist/rsync_manager __pycache__/ *.spec
 
 # Build the executable
 echo "Building executable with PyInstaller..."

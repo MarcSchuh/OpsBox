@@ -14,7 +14,7 @@ fi
 
 # Clean previous builds
 echo "Cleaning previous builds..."
-rm -rf build/db_backup dist/ __pycache__/ *.spec
+rm -rf build/ dist/db_backup __pycache__/ *.spec
 
 # Build the executable
 echo "Building executable with PyInstaller..."
