@@ -1,5 +1,6 @@
 """Configuration management for backup operations."""
 
+import getpass
 import json
 import os
 from dataclasses import dataclass, field
@@ -25,7 +26,7 @@ class BackupConfig:
     password_lookup_2: str | None = None
 
     # Optional fields with defaults
-    default_user: str = field(default_factory=lambda: os.getlogin())
+    default_user: str = field(default_factory=lambda: getpass.getuser())
     keep_last: str = "10"
     keep_daily: str = "21"
     keep_monthly: str = "5"
@@ -186,7 +187,7 @@ class ConfigManager:
                 ssh_key=config_data.get("ssh_key"),
                 ssh_user=config_data.get("ssh_user"),
                 network_host=config_data.get("network_host"),
-                default_user=config_data.get("default_user", os.getlogin()),
+                default_user=config_data.get("default_user", getpass.getuser()),
                 keep_last=config_data.get("keep_last", "10"),
                 keep_daily=config_data.get("keep_daily", "21"),
                 keep_monthly=config_data.get("keep_monthly", "5"),

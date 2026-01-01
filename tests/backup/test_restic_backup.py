@@ -63,7 +63,7 @@ class TestBackupScript:
 
     def test_backup_script_init_success(self, temp_config, mock_lock_manager) -> None:
         """Test that BackupScript initializes successfully with valid configuration."""
-        config_file, email_settings, backup_source = temp_config
+        config_file, _email_settings, _backup_source = temp_config
 
         with (
             patch(

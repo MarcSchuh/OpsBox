@@ -1,7 +1,7 @@
 """Tests for the config_manager module."""
 
+import getpass
 import json
-import os
 import tempfile
 from pathlib import Path
 
@@ -408,7 +408,7 @@ class TestBackupConfig:
             assert config.keep_monthly == "5"
             assert config.ssh_key_max_retries == 12
             assert config.detailed_report is True
-            assert config.default_user == os.getlogin()
+            assert config.default_user == getpass.getuser()
 
     def test_get_default_config(self) -> None:
         """Test that get_default_config returns a template configuration."""

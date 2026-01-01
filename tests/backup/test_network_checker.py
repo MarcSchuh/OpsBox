@@ -88,7 +88,7 @@ class TestNetworkChecker:
         with patch("subprocess.run", return_value=mock_result):
             with pytest.raises(
                 NetworkUnreachableError,
-                match="Host example.com is not reachable",
+                match=r"Host example\.com is not reachable",
             ):
                 network_checker.check_network_connectivity_or_raise("example.com")
 

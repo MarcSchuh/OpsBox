@@ -1,7 +1,7 @@
 """Rsync backup manager with SSH support and retry logic."""
 
 import argparse
-import os
+import getpass
 import re
 import subprocess
 import sys
@@ -71,7 +71,7 @@ class RsyncConfig:
     ssh_user: str | None = None
     network_host: str | None = None
     rsync_options: dict[str, Any] = field(default_factory=dict)
-    default_user: str = field(default_factory=lambda: os.getlogin())
+    default_user: str = field(default_factory=lambda: getpass.getuser())
 
     def __post_init__(self) -> None:
         """Validate configuration after initialization."""
@@ -215,7 +215,7 @@ class RsyncManager:
                 ssh_user=config_data.get("ssh_user"),
                 network_host=config_data.get("network_host"),
                 rsync_options=config_data.get("rsync_options", {}),
-                default_user=config_data.get("default_user", os.getlogin()),
+                default_user=config_data.get("default_user", getpass.getuser()),
             )
 
         except KeyError as e:
