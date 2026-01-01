@@ -1,11 +1,7 @@
 """Tests for the RsyncManager class and related functionality."""
 
-# Import module with hyphen in filename
-import importlib.util
-import sys
 import tempfile
 from pathlib import Path
-from typing import Any
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -17,32 +13,11 @@ from opsbox.backup.exceptions import (
     SSHKeyNotFoundError,
 )
 from opsbox.exceptions import LockAlreadyTakenError, RsyncError
-
-# Dynamic import needed due to hyphen in filename
-# Mypy type checking is disabled for this section due to dynamic imports
-_rsync_manager_path = (
-    Path(__file__).parent.parent.parent
-    / "src"
-    / "opsbox"
-    / "rsync"
-    / "rsync-manager.py"
+from opsbox.rsync import (
+    RsyncConfig,
+    RsyncManager,
 )
-_spec = importlib.util.spec_from_file_location(
-    "opsbox.rsync.rsync_manager",
-    _rsync_manager_path,
-)
-if _spec is None or _spec.loader is None:
-    _error_msg = "Could not load rsync_manager module"
-    raise ImportError(_error_msg)
-_rsync_manager_module = importlib.util.module_from_spec(_spec)
-sys.modules["opsbox.rsync.rsync_manager"] = _rsync_manager_module
-_spec.loader.exec_module(_rsync_manager_module)
-
-Constants = _rsync_manager_module.Constants
-RsyncConfig = _rsync_manager_module.RsyncConfig
-RsyncStats = _rsync_manager_module.RsyncStats
-# Type ignore needed because RsyncManager is assigned from dynamic import
-RsyncManager: Any = _rsync_manager_module.RsyncManager  # type: ignore[assignment, misc]
+from opsbox.rsync.rsync_manager import main
 
 
 class TestRsyncConfigValidation:
@@ -820,7 +795,7 @@ class TestRsyncManagerWorkflow:
             # Verify rsync was called
             mock_subprocess.assert_called()
             # Verify email was sent
-            manager.encrypted_mail.send_mail_with_retries.assert_called()
+            manager.encrypted_mail.send_mail_with_retries.assert_called()  # type: ignore[attr-defined]
 
     def test_run_target_dir_not_mounted(self) -> None:
         """Test raises ConfigurationError when target dir not mounted."""
@@ -849,7 +824,7 @@ class TestRsyncManagerWorkflow:
             manager = self._create_test_manager(temp_path)
 
             # Setup network checker to raise error
-            manager.network_checker.check_network_connectivity_or_raise.side_effect = (
+            manager.network_checker.check_network_connectivity_or_raise.side_effect = (  # type: ignore[attr-defined]
                 NetworkUnreachableError("Host unreachable")
             )
 
@@ -857,9 +832,9 @@ class TestRsyncManagerWorkflow:
                 manager.run()
 
             # Verify error email was sent (may be called multiple times)
-            assert manager.encrypted_mail.send_mail_with_retries.call_count >= 1
+            assert manager.encrypted_mail.send_mail_with_retries.call_count >= 1  # type: ignore[attr-defined]
             # Check if any call has the connection failed subject
-            calls = manager.encrypted_mail.send_mail_with_retries.call_args_list
+            calls = manager.encrypted_mail.send_mail_with_retries.call_args_list  # type: ignore[attr-defined]
             subjects = [call.kwargs.get("subject", "") for call in calls]
             assert any("server connection failed" in subj.lower() for subj in subjects)
 
@@ -885,10 +860,10 @@ class TestRsyncManagerWorkflow:
             manager = self._create_test_manager(temp_path, config_data)
 
             # Setup network checker to succeed, but SSH manager to fail
-            manager.network_checker.check_network_connectivity_or_raise.return_value = (
+            manager.network_checker.check_network_connectivity_or_raise.return_value = (  # type: ignore[attr-defined]
                 None
             )
-            manager.ssh_manager.ensure_ssh_key_loaded.side_effect = SSHKeyNotFoundError(
+            manager.ssh_manager.ensure_ssh_key_loaded.side_effect = SSHKeyNotFoundError(  # type: ignore[attr-defined]
                 "SSH key not found",
             )
 
@@ -896,9 +871,9 @@ class TestRsyncManagerWorkflow:
                 manager.run()
 
             # Verify error email was sent (may be called multiple times)
-            assert manager.encrypted_mail.send_mail_with_retries.call_count >= 1
+            assert manager.encrypted_mail.send_mail_with_retries.call_count >= 1  # type: ignore[attr-defined]
             # Check if any call has the connection failed subject
-            calls = manager.encrypted_mail.send_mail_with_retries.call_args_list
+            calls = manager.encrypted_mail.send_mail_with_retries.call_args_list  # type: ignore[attr-defined]
             subjects = [call.kwargs.get("subject", "") for call in calls]
             assert any("server connection failed" in subj.lower() for subj in subjects)
 
@@ -934,7 +909,7 @@ class TestRsyncManagerWorkflow:
                 manager._execute_rsync()
 
             # Verify retries were attempted
-            assert mock_subprocess.call_count == 2
+            assert mock_subprocess.call_count == 2  # type: ignore[attr-defined]
 
     @patch("opsbox.rsync.rsync_manager.subprocess.run")
     @patch("opsbox.rsync.rsync_manager.time.sleep")
@@ -971,7 +946,7 @@ class TestRsyncManagerWorkflow:
             manager._execute_rsync()
 
             # Verify retry was attempted
-            assert mock_subprocess.call_count == 2
+            assert mock_subprocess.call_count == 2  # type: ignore[attr-defined]
 
 
 class TestRsyncManagerCLI:
@@ -1013,9 +988,6 @@ class TestRsyncManagerCLI:
         mock_rsync_manager.return_value = mock_manager_instance
 
         with patch("opsbox.rsync.rsync_manager.sys.exit") as mock_exit:
-            # Import main function from the module
-            main = _rsync_manager_module.main
-
             main()
             mock_exit.assert_called_once_with(0)
 
@@ -1039,9 +1011,6 @@ class TestRsyncManagerCLI:
             ) as mock_manager,
         ):
             mock_manager.side_effect = ConfigurationError("Config error")
-
-            # Import main function from the module
-            main = _rsync_manager_module.main
 
             main()
             mock_exit.assert_called_once_with(1)
@@ -1069,9 +1038,6 @@ class TestRsyncManagerCLI:
             mock_manager_instance.run.side_effect = LockAlreadyTakenError("Lock taken")
             mock_manager.return_value = mock_manager_instance
 
-            # Import main function from the module
-            main = _rsync_manager_module.main
-
             main()
             mock_exit.assert_called_once_with(1)
 
@@ -1094,9 +1060,6 @@ class TestRsyncManagerCLI:
         mock_rsync_manager.return_value = mock_manager_instance
 
         with patch("opsbox.rsync.rsync_manager.sys.exit"):
-            # Import main function from the module
-            main = _rsync_manager_module.main
-
             main()
 
             # Verify log level was passed

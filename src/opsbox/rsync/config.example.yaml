@@ -1,4 +1,4 @@
-# Example configuration for rsync-manager
+# Example configuration for rsync_manager
 # Copy this file and adjust the values for your environment
 
 # Required: Target directory where rsync will store files locally
