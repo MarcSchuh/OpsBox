@@ -9,6 +9,7 @@ import tempfile
 import time
 from dataclasses import dataclass, field
 from enum import Enum
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -172,7 +173,7 @@ class RsyncManager:
         self.ssh_manager = SSHManager(self.logger)
 
         self.logger.info("Rsync manager initialized successfully")
-        self.max_log_lines = 30
+        self.max_log_lines = 15
 
     @staticmethod
     def _load_config(config_path: Path) -> RsyncConfig:
@@ -386,6 +387,7 @@ class RsyncManager:
             total_size=total_size if total_size is not None else 0,
         )
 
+    @lru_cache(maxsize=1000)  # noqa: B019
     def _get_last_log_lines(self, num_lines: int) -> list[str]:
         """Get the last num_lines lines from the log file.
 
