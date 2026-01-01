@@ -14,7 +14,7 @@ fi
 
 # Clean previous builds
 echo "Cleaning previous builds..."
-rm -rf build/encrypted_mail dist/ __pycache__/ *.spec
+rm -rf build/ dist/encrypted_mail __pycache__/ *.spec
 
 # Build the executable
 echo "Building executable with PyInstaller..."
