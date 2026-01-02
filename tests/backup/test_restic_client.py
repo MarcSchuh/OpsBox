@@ -126,10 +126,13 @@ class TestResticClient:
         mock_result = Mock()
         mock_result.returncode = 0
         mock_result.stdout = (
-            "ID        Time                 Host\n"
-            "a1b2c3d4 2024-01-01 12:00:00  host1\n"
-            "e5f6a7b8 2024-01-02 12:00:00  host2\n"
-            "c9d0e1f2 2024-01-03 12:00:00  host3\n"
+            "ID        Time                 Host        Tags        Paths\n"
+            "------------------------------------------------------------------------------\n"
+            "a1b2c3d4 2024-01-01 12:00:00  host   /path/to/backup\n"
+            "e5f6a7b8 2024-01-02 12:00:00  host   /path/to/backup\n"
+            "c9d0e1f2 2024-01-03 12:00:00  host   /path/to/backup\n"
+            "------------------------------------------------------------------------------\n"
+            "3 snapshots"
         )
 
         with patch.object(restic_client, "_run_command", return_value=mock_result):
