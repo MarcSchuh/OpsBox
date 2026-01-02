@@ -33,6 +33,7 @@ class BackupConfig:
     ssh_key_max_retries: int = 12
     detailed_report: bool = True
     restic_password: str | None = None
+    backup_title: str = "Default backupt title"
 
     # Network and SSH fields
     network_host: str | None = None
