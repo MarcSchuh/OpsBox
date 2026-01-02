@@ -70,7 +70,7 @@ class LockManager:
             error_message = f"Lock file {self.lock_file} already exists."
             raise LockAlreadyTakenError(error_message)
         self.lock_file.touch()
-        self.logger.info("Lock file created.")
+        self.logger.info(f"Lock file {self.lock_file} created.")
 
     def release_lock(self) -> None:
         """Release the lock file."""

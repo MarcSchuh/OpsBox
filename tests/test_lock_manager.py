@@ -81,7 +81,7 @@ class TestLockManager:
             assert not lock_file.exists()
             # Check that both log messages were called
             assert logger.info.call_count == 2
-            logger.info.assert_any_call("Lock file created.")
+            logger.info.assert_any_call(f"Lock file {lock_file} created.")
             logger.info.assert_any_call("Lock file released.")
 
     def test_context_manager_with_exception(self) -> None:
@@ -99,7 +99,7 @@ class TestLockManager:
             assert not lock_file.exists()
             # Check that both log messages were called
             assert logger.info.call_count == 2
-            logger.info.assert_any_call("Lock file created.")
+            logger.info.assert_any_call(f"Lock file {lock_file} created.")
             logger.info.assert_any_call("Lock file released.")
 
     def test_create_lock_success(self) -> None:
@@ -112,7 +112,7 @@ class TestLockManager:
             lock_manager.create_lock()
 
             assert lock_file.exists()
-            logger.info.assert_called_with("Lock file created.")
+            logger.info.assert_called_with(f"Lock file {lock_file} created.")
 
     def test_create_lock_already_exists(self) -> None:
         """Test lock creation fails when lock file already exists."""
@@ -327,7 +327,7 @@ class TestLockManager:
             lock_manager.create_lock()
 
             assert lock_file.exists()
-            logger.info.assert_called_with("Lock file created.")
+            logger.info.assert_called_with(f"Lock file {lock_file} created.")
 
     def test_lock_file_relative_path(self) -> None:
         """Test lock file creation with relative path."""
@@ -343,7 +343,7 @@ class TestLockManager:
                 lock_manager.create_lock()
 
                 assert lock_file.exists()
-                logger.info.assert_called_with("Lock file created.")
+                logger.info.assert_called_with(f"Lock file {lock_file} created.")
             finally:
                 os.chdir(original_cwd)
 

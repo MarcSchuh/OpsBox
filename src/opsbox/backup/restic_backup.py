@@ -156,7 +156,7 @@ class BackupScript:
         """Execute the complete backup workflow with proper error handling."""
         with self.lock_manager:
             try:
-                self.logger.info("Starting backup workflow")
+                self.logger.info(f"Starting backup {self.config.backup_title} workflow")
 
                 # Step 1: Setup environment
                 self._setup_environment()

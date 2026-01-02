@@ -263,12 +263,10 @@ class RsyncManager:
             raise ConfigurationError(error_msg)
 
         # Check network connectivity
-        self.logger.info(f"Checking network connectivity to {host}")
         self.network_checker.check_network_connectivity_or_raise(host)
 
         # Check SSH key if configured
         if self.config.ssh_key and self.config.ssh_user:
-            self.logger.info("Ensuring SSH key is loaded")
             self.ssh_manager.ensure_ssh_key_loaded(
                 ssh_key=self.config.ssh_key,
                 ssh_user=self.config.ssh_user,
@@ -560,7 +558,7 @@ class RsyncManager:
         # Build subject
         subject_prefix = "Error: " if not success or has_errors else ""
 
-        subject = f"{subject_prefix}Rsync {self.config.rsync_title} backup summary - {self.script_name}"
+        subject = f"{subject_prefix}Rsync {self.config.rsync_title} backup summary"
 
         # Send email
         try:
@@ -581,7 +579,9 @@ class RsyncManager:
         """Execute the complete rsync workflow with proper error handling."""
         with self.lock_manager:
             try:
-                self.logger.info("Starting rsync backup workflow")
+                self.logger.info(
+                    f"Starting rsync {self.config.rsync_title} backup workflow",
+                )
 
                 # Step 1: Check if sync is mounted
                 self._ensure_target_dir_is_mounted(Path(self.config.rsync_target))
