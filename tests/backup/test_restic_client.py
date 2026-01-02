@@ -80,6 +80,7 @@ class TestResticClient:
                 ):
                     snapshot_id = restic_client.backup("/backup/source", ["*.tmp"])
 
+                    assert isinstance(snapshot_id, ResticSnapshotId)
                     assert snapshot_id == "a1b2c3d4"
                     restic_client.logger.info.assert_called()
 
@@ -135,9 +136,14 @@ class TestResticClient:
             snapshots = restic_client.get_snapshots()
 
             assert len(snapshots) == 3
-            assert "a1b2c3d4" in snapshots
-            assert "e5f6a7b8" in snapshots
-            assert "c9d0e1f2" in snapshots
+            assert all(isinstance(s, ResticSnapshotId) for s in snapshots)
+            assert ResticSnapshotId("a1b2c3d4") in snapshots
+            assert ResticSnapshotId("e5f6a7b8") in snapshots
+            assert ResticSnapshotId("c9d0e1f2") in snapshots
+            # Also test string comparison
+            assert "a1b2c3d4" in [str(s) for s in snapshots]
+            assert "e5f6a7b8" in [str(s) for s in snapshots]
+            assert "c9d0e1f2" in [str(s) for s in snapshots]
 
     def test_get_snapshots_failure(self, restic_client) -> None:
         """Test that ResticCommandFailedError is raised on get_snapshots failure."""
