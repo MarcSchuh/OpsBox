@@ -17,6 +17,7 @@ class ResticClient:
     """Handles all restic command execution with proper error handling and logging."""
 
     MIN_SNAPSHOT_ID_LENGTH = 7
+    MAX_SNAPSHOT_ID_LENGTH = 8
     SNAPSHOT_PARTS_MIN_LENGTH = 2
 
     def __init__(
@@ -222,8 +223,7 @@ class ResticClient:
             if (
                 len(parts) > 0
                 and len(parts[0]) >= self.MIN_SNAPSHOT_ID_LENGTH
-                and "---------------" not in parts
-                and "ID        Time                 Host" not in parts
+                and len(parts[0]) <= self.MAX_SNAPSHOT_ID_LENGTH
             ):
                 snapshot_ids.append(ResticSnapshotId(parts[0]))
 
