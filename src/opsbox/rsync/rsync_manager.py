@@ -155,7 +155,7 @@ class RsyncManager:
             self.log_file_path = Path(self.config.log_file)
             self.log_file_path.parent.mkdir(parents=True, exist_ok=True)
         else:
-            self.log_file_path = self.temp_dir / f"{self.script_name}.log"
+            self.log_file_path = self.temp_dir / f"{self.script_name}.{target_hash}.log"
 
         # Initialize components
         self.encrypted_mail = EncryptedMail(
