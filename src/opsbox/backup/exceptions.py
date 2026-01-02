@@ -85,3 +85,7 @@ class MaintenanceError(BackupError):
 
 class DiffParsingError(BackupError):
     """Raised when there are issues parsing the diff output."""
+
+
+class InvalidSnapshotIDError(BackupError):
+    """Raised when snapshot ID format is invalid."""

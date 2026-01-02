@@ -9,6 +9,7 @@ from opsbox.backup.exceptions import (
     ResticCommandFailedError,
     SnapshotIDNotFoundError,
 )
+from opsbox.backup.restic_backup import ResticSnapshotId
 from opsbox.encrypted_mail import EncryptedMail
 
 
@@ -163,7 +164,7 @@ class ResticClient:
         self,
         backup_source: str,
         excluded_files: list[str],
-    ) -> str:
+    ) -> ResticSnapshotId:
         """Run restic backup and return the snapshot ID."""
         cmd = [
             self.restic_path,
@@ -185,22 +186,20 @@ class ResticClient:
 
         # Extract snapshot ID from log file
         snapshot_id = self._extract_snapshot_id(self.log_file.read_text())
-        if not snapshot_id:
-            error_msg = f"Could not find snapshot ID in restic output. Please see log file: {self.log_file}"
-            raise SnapshotIDNotFoundError(error_msg)
 
         self.logger.info(f"Backup completed successfully. Snapshot ID: {snapshot_id}")
         return snapshot_id
 
-    def _extract_snapshot_id(self, output: str) -> str | None:
+    def _extract_snapshot_id(self, output: str) -> ResticSnapshotId:
         """Extract snapshot ID from restic output."""
         lines = output.splitlines()
         for line in reversed(lines):
             if line.startswith("snapshot"):
                 parts = line.split()
                 if len(parts) >= self.SNAPSHOT_PARTS_MIN_LENGTH:
-                    return parts[1]
-        return None
+                    return ResticSnapshotId(parts[1])
+        error_msg = f"Could not find snapshot ID in restic output: {output}"
+        raise SnapshotIDNotFoundError(error_msg)
 
     def get_snapshots(self) -> list[str]:
         """Get list of snapshot IDs."""
@@ -230,13 +229,13 @@ class ResticClient:
 
         return snapshot_ids
 
-    def diff(self, snapshot1: str, snapshot2: str) -> str:
+    def diff(self, snapshot1: ResticSnapshotId, snapshot2: ResticSnapshotId) -> str:
         """Get diff between two snapshots."""
         cmd = [
             self.restic_path,
             "diff",
-            snapshot1,
-            snapshot2,
+            str(snapshot1),
+            str(snapshot2),
             "-r",
             self.backup_target,
             *self._get_cache_dir_args(),
@@ -249,14 +248,14 @@ class ResticClient:
         self.logger.info(f"Diff output: {result.stdout}")
         return result.stdout
 
-    def find(self, file_pattern: str, snapshot_id: str) -> str:
+    def find(self, file_pattern: str, snapshot_id: ResticSnapshotId) -> str:
         """Find files in a snapshot."""
         cmd = [
             self.restic_path,
             "find",
             file_pattern,
             "-s",
-            snapshot_id,
+            str(snapshot_id),
             "--repo",
             self.backup_target,
             *self._get_cache_dir_args(),
