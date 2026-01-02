@@ -837,20 +837,20 @@ class BackupScript:
             if "no errors were found" in check_output:
                 self.logger.info("Maintenance completed successfully")
                 self.encrypted_mail.send_mail_with_retries(
-                    subject=f"Maintenance {self.config.backup_title} successful",
+                    subject=f"Backup maintenance {self.config.backup_title} successful",
                     message="Repository maintenance completed successfully.",
                 )
             else:
                 self.logger.warning("Maintenance completed with warnings")
                 self.encrypted_mail.send_mail_with_retries(
-                    subject=f"Maintenance {self.config.backup_title} completed with warnings",
+                    subject=f"Backup maintenance {self.config.backup_title} completed with warnings",
                     message=f"Repository maintenance completed with warnings:\n{check_output}",
                 )
 
         except Exception as e:
             self.logger.exception("Maintenance failed")
             self.encrypted_mail.send_mail_with_retries(
-                subject=f"Maintenance {self.config.backup_title} failed",
+                subject=f"Backup maintenance {self.config.backup_title} failed",
                 message=f"Repository maintenance failed: {e}",
             )
             error_msg = f"Maintenance failed: {e}"
