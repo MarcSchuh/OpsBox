@@ -42,3 +42,6 @@ rsync_options:
   delete: true
   # Show progress during transfer
   progress: true
+
+# Optional: Title for the rsync operation (defaults to "Default rsync title")
+rsync_title: "Default rsync title"
