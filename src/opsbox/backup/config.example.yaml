@@ -25,3 +25,4 @@ monitored_folders: [] # List of folders to monitor for changes (empty list to di
   # Example:
   # - /path/to/important/folder
   # - /another/monitored/path
+backup_title: "Default backup title"

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "opsbox"
-version = "0.1.1"
+version = "0.1.2"
 description = "A comprehensive Python library for server operations including backup scripts, encrypted mail functionality, and utility tools"
 readme = "README.md"
 license = {text = "MIT"}

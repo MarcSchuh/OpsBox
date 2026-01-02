@@ -71,6 +71,7 @@ class RsyncConfig:
     ssh_key: str | None = None
     ssh_user: str | None = None
     network_host: str | None = None
+    rsync_title: str = "Default rsync title"
     rsync_options: dict[str, Any] = field(default_factory=dict)
     default_user: str = field(default_factory=lambda: getpass.getuser())
 
@@ -218,6 +219,7 @@ class RsyncManager:
                 network_host=config_data.get("network_host"),
                 rsync_options=config_data.get("rsync_options", {}),
                 default_user=config_data.get("default_user", getpass.getuser()),
+                rsync_title=config_data.get("rsync_title", "Default rsync title"),
             )
 
         except KeyError as e:
@@ -558,7 +560,7 @@ class RsyncManager:
         # Build subject
         subject_prefix = "Error: " if not success or has_errors else ""
 
-        subject = f"{subject_prefix}Rsync backup summary - {self.script_name}"
+        subject = f"{subject_prefix}Rsync {self.config.rsync_title} backup summary - {self.script_name}"
 
         # Send email
         try:
@@ -595,7 +597,7 @@ class RsyncManager:
                     error_msg = f"Server connection check failed: {e}"
                     self.logger.exception(error_msg)
                     self.encrypted_mail.send_mail_with_retries(
-                        subject="Rsync server connection failed",
+                        subject=f"Rsync {self.config.rsync_title} server connection failed",
                         message=f"Script {self.script_name} encountered a connection error: {e}",
                     )
                     raise
@@ -608,7 +610,7 @@ class RsyncManager:
                 self.logger.exception("Unexpected error in rsync workflow")
                 try:
                     self.encrypted_mail.send_mail_with_retries(
-                        subject="Rsync backup critical error",
+                        subject=f"Rsync {self.config.rsync_title} backup critical error",
                         message=f"Script {self.script_name} encountered an unexpected error: {type(e).__name__}: {e}",
                         mail_attachment=str(self.log_file_path),
                     )

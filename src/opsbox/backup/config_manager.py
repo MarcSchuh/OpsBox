@@ -199,6 +199,7 @@ class ConfigManager:
                 deletion_threshold=config_data.get("deletion_threshold"),
                 alteration_threshold=config_data.get("alteration_threshold"),
                 monitored_folders=config_data.get("monitored_folders", []),
+                backup_title=config_data.get("backup_title", "Default backup title"),
             )
 
         except KeyError as e:
