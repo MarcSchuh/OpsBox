@@ -1,6 +1,7 @@
 """Refactored backup script with improved architecture and error handling."""
 
 import argparse
+import hashlib
 import os
 import sys
 import tempfile
@@ -92,8 +93,9 @@ class BackupScript:
         self.temp_dir = Path(temp_dir) if temp_dir else Path(tempfile.gettempdir())
         self.temp_dir.mkdir(parents=True, exist_ok=True)
 
-        # Setup lock file
-        self.lock_file_path = self.temp_dir / f"{self.script_name}.lock"
+        # Setup lock file with hash of backup target to allow parallel execution
+        target_hash = self._get_target_hash(self.config.backup_target)
+        self.lock_file_path = self.temp_dir / f"{self.script_name}.{target_hash}.lock"
 
         # Initialize components with dependency injection
         self._initialize_components(restic_path)
@@ -105,6 +107,19 @@ class BackupScript:
         if os.name != "posix" or sys.platform != "linux":
             error_msg = "This script only runs on Linux."
             raise WrongOSForResticBackupError(error_msg)
+
+    def _get_target_hash(self, backup_target: str) -> str:
+        """Generate a stable hash from the backup target directory.
+
+        Args:
+            backup_target: The backup target path (e.g., "sftp:user@host:/path/to/repo")
+
+        Returns:
+            First 8 hexadecimal digits of the SHA256 hash of the backup target
+
+        """
+        hash_obj = hashlib.sha256(backup_target.encode("utf-8"))
+        return hash_obj.hexdigest()[:8]
 
     def _initialize_components(self, restic_path: str) -> None:
         """Initialize all component classes with proper dependency injection."""
