@@ -13,7 +13,6 @@ from opsbox.backup.exceptions import (
     ConfigurationError,
     DiffParsingError,
     InvalidResticConfigError,
-    InvalidSnapshotIDError,
     MaintenanceError,
     NetworkUnreachableError,
     ResticBackupFailedError,
@@ -26,78 +25,11 @@ from opsbox.backup.exceptions import (
 from opsbox.backup.network_checker import NetworkChecker
 from opsbox.backup.password_manager import PasswordManager
 from opsbox.backup.restic_client import ResticClient
+from opsbox.backup.snapshot_id import ResticSnapshotId
 from opsbox.backup.ssh_manager import SSHManager
 from opsbox.encrypted_mail import EncryptedMail
 from opsbox.locking import LockManager
 from opsbox.logging import LoggingConfig, configure_logging
-
-
-class ResticSnapshotId:
-    """Represents a validated Restic snapshot ID.
-
-    Snapshot IDs are always exactly 8 hexadecimal characters (e.g., "def54c8d").
-
-    Attributes:
-        value: The snapshot ID as a string
-
-    Raises:
-        InvalidSnapshotIDError: If the snapshot ID format is invalid
-
-    """
-
-    SNAPSHOT_ID_LENGTH = 8
-
-    def __init__(self, value: str) -> None:
-        """Initialize ResticSnapshotId with validation.
-
-        Args:
-            value: The snapshot ID string to validate
-
-        Raises:
-            InvalidSnapshotIDError: If the snapshot ID is not exactly 8 hex characters
-
-        """
-        if not isinstance(value, str):
-            error_msg = f"Snapshot ID must be a string, got {type(value).__name__}"
-            raise InvalidSnapshotIDError(error_msg)
-
-        if len(value) != self.SNAPSHOT_ID_LENGTH:
-            error_msg = (
-                f"Snapshot ID must be exactly {self.SNAPSHOT_ID_LENGTH} characters, "
-                f"got {len(value)}: {value}"
-            )
-            raise InvalidSnapshotIDError(error_msg)
-
-        try:
-            # Validate that all characters are hexadecimal
-            int(value, 16)
-        except ValueError:
-            error_msg = (
-                f"Snapshot ID must contain only hexadecimal characters, got: {value}"
-            )
-            raise InvalidSnapshotIDError(error_msg) from None
-
-        self.value = value
-
-    def __str__(self) -> str:
-        """Return the snapshot ID as a string."""
-        return self.value
-
-    def __repr__(self) -> str:
-        """Return a representation of the snapshot ID."""
-        return f"ResticSnapshotId('{self.value}')"
-
-    def __eq__(self, other: object) -> bool:
-        """Compare with another ResticSnapshotId or string."""
-        if isinstance(other, ResticSnapshotId):
-            return self.value == other.value
-        if isinstance(other, str):
-            return self.value == other
-        return False
-
-    def __hash__(self) -> int:
-        """Make ResticSnapshotId hashable."""
-        return hash(self.value)
 
 
 @dataclass
@@ -770,11 +702,11 @@ class BackupScript:
 
             # Get the previous snapshot (second to last)
             # Convert snapshot IDs to ResticSnapshotId for comparison
-            current_snapshot_id = ResticSnapshotId(snapshots[-2])
-            if current_snapshot_id != snapshot_id:
-                error_msg = f"Here I was expecting to find the current snapshot, but I found something else. Expected: {snapshot_id}, Found: {current_snapshot_id}"
+            current_snapshot = snapshots[-2]
+            if current_snapshot != snapshot_id:
+                error_msg = f"Here I was expecting to find the current snapshot, but I found something else. Expected: {snapshot_id}, Found: {current_snapshot}"
                 raise SnapshotIDNotFoundError(error_msg)
-            previous_snapshot = ResticSnapshotId(snapshots[-3])
+            previous_snapshot = snapshots[-3]
 
             diff_output = self.restic_client.diff(previous_snapshot, snapshot_id)
 
