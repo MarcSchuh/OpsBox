@@ -9,7 +9,7 @@ from opsbox.backup.exceptions import (
     ResticCommandFailedError,
     SnapshotIDNotFoundError,
 )
-from opsbox.backup.restic_backup import ResticSnapshotId
+from opsbox.backup.snapshot_id import ResticSnapshotId
 from opsbox.encrypted_mail import EncryptedMail
 
 
@@ -201,7 +201,7 @@ class ResticClient:
         error_msg = f"Could not find snapshot ID in restic output: {output}"
         raise SnapshotIDNotFoundError(error_msg)
 
-    def get_snapshots(self) -> list[str]:
+    def get_snapshots(self) -> list[ResticSnapshotId]:
         """Get list of snapshot IDs."""
         cmd = [
             self.restic_path,
@@ -225,7 +225,7 @@ class ResticClient:
                 and "---------------" not in parts
                 and "ID        Time                 Host" not in parts
             ):
-                snapshot_ids.append(parts[0])
+                snapshot_ids.append(ResticSnapshotId(parts[0]))
 
         return snapshot_ids
 

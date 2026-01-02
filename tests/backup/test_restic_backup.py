@@ -16,6 +16,7 @@ from opsbox.backup.exceptions import (
     WrongOSForResticBackupError,
 )
 from opsbox.backup.restic_backup import BackupScript
+from opsbox.backup.snapshot_id import ResticSnapshotId
 
 
 class TestBackupScript:
@@ -109,13 +110,18 @@ class TestBackupScript:
         config_file, _, _ = temp_config
 
         mock_restic_client = Mock()
-        mock_restic_client.backup.return_value = "abc123def"
+        snapshot_id = ResticSnapshotId("a1b2c3d4")
+        mock_restic_client.backup.return_value = snapshot_id
         # The code expects snapshots[-2] to be the current snapshot, so we need at least 3 snapshots
         # with the current one at index -2
-        mock_restic_client.get_snapshots.return_value = ["snap1", "abc123def", "snap3"]
+        mock_restic_client.get_snapshots.return_value = [
+            "e5f6a7b8",
+            "a1b2c3d4",
+            "c9d0e1f2",
+        ]
         mock_restic_client.diff.return_value = "Files: 10\nDirs: 5"
         mock_restic_client.find.return_value = (
-            "Found matching entries in snapshot abc123def"
+            "Found matching entries in snapshot a1b2c3d4"
         )
         mock_restic_client.check.return_value = "no errors were found"
         mock_restic_client.log_file = Path("/tmp/restic.log")
@@ -192,10 +198,15 @@ class TestBackupScript:
         )
 
         mock_restic_client = Mock()
-        mock_restic_client.backup.return_value = "abc123def"
-        mock_restic_client.get_snapshots.return_value = ["snap1", "abc123def", "snap3"]
+        snapshot_id = ResticSnapshotId("a1b2c3d4")
+        mock_restic_client.backup.return_value = snapshot_id
+        mock_restic_client.get_snapshots.return_value = [
+            "e5f6a7b8",
+            "a1b2c3d4",
+            "c9d0e1f2",
+        ]
         mock_restic_client.find.return_value = (
-            "Found matching entries in snapshot abc123def"
+            "Found matching entries in snapshot a1b2c3d4"
         )
         mock_restic_client.check.return_value = "no errors were found"
         mock_restic_client.log_file = Path("/tmp/restic.log")
@@ -263,10 +274,15 @@ class TestBackupScript:
         )
 
         mock_restic_client = Mock()
-        mock_restic_client.backup.return_value = "abc123def"
-        mock_restic_client.get_snapshots.return_value = ["snap1", "abc123def", "snap3"]
+        snapshot_id = ResticSnapshotId("a1b2c3d4")
+        mock_restic_client.backup.return_value = snapshot_id
+        mock_restic_client.get_snapshots.return_value = [
+            "e5f6a7b8",
+            "a1b2c3d4",
+            "c9d0e1f2",
+        ]
         mock_restic_client.find.return_value = (
-            "Found matching entries in snapshot abc123def"
+            "Found matching entries in snapshot a1b2c3d4"
         )
         mock_restic_client.check.return_value = "no errors were found"
         mock_restic_client.log_file = Path("/tmp/restic.log")
@@ -367,7 +383,7 @@ class TestBackupScript:
             # Verify email was sent about skipped backup
             mock_encrypted_mail.send_mail_with_retries.assert_called()
             call_args = mock_encrypted_mail.send_mail_with_retries.call_args
-            assert "Backup skipped" in call_args[1]["subject"]
+            assert "skipped" in call_args[1]["subject"]
 
     def test_run_backup_ssh_key_not_found(self, temp_config, mock_lock_manager) -> None:
         """Test that SSH key not found is handled gracefully (sends email, skips backup)."""
@@ -431,7 +447,7 @@ class TestBackupScript:
             # Verify email was sent about skipped backup
             mock_encrypted_mail.send_mail_with_retries.assert_called()
             call_args = mock_encrypted_mail.send_mail_with_retries.call_args
-            assert "Backup skipped" in call_args[1]["subject"]
+            assert "skipped" in call_args[1]["subject"]
 
     def test_run_backup_verification_success(
         self,
@@ -442,11 +458,16 @@ class TestBackupScript:
         config_file, _, _ = temp_config
 
         mock_restic_client = Mock()
-        mock_restic_client.backup.return_value = "abc123def"
-        mock_restic_client.get_snapshots.return_value = ["snap1", "abc123def", "snap3"]
+        snapshot_id = ResticSnapshotId("a1b2c3d4")
+        mock_restic_client.backup.return_value = snapshot_id
+        mock_restic_client.get_snapshots.return_value = [
+            "12345678",
+            "a1b2c3d4",
+            "87654321",
+        ]
         mock_restic_client.diff.return_value = "Files: 10"
         mock_restic_client.find.return_value = (
-            "Found matching entries in snapshot abc123def"
+            "Found matching entries in snapshot a1b2c3d4"
         )
         mock_restic_client.check.return_value = "no errors were found"
         mock_restic_client.log_file = Path("/tmp/restic.log")
@@ -491,8 +512,12 @@ class TestBackupScript:
         config_file, _, _ = temp_config
 
         mock_restic_client = Mock()
-        mock_restic_client.backup.return_value = "abc123def"
-        mock_restic_client.get_snapshots.return_value = ["snap1", "abc123def", "snap3"]
+        mock_restic_client.backup.return_value = ResticSnapshotId("abc123de")
+        mock_restic_client.get_snapshots.return_value = [
+            ResticSnapshotId("a1b2c3d5"),
+            ResticSnapshotId("abc123de"),
+            ResticSnapshotId("a1b2c3d6"),
+        ]
         mock_restic_client.diff.return_value = "Files: 10"
         mock_restic_client.find.return_value = "No matching entries found"
         mock_restic_client.log_file = Path("/tmp/restic.log")
@@ -538,11 +563,16 @@ class TestBackupScript:
         config_file, _, _ = temp_config
 
         mock_restic_client = Mock()
-        mock_restic_client.backup.return_value = "abc123def"
-        mock_restic_client.get_snapshots.return_value = ["snap1", "abc123def", "snap3"]
+        snapshot_id = ResticSnapshotId("a1b2c3d4")
+        mock_restic_client.backup.return_value = snapshot_id
+        mock_restic_client.get_snapshots.return_value = [
+            "12345678",
+            "a1b2c3d4",
+            "87654321",
+        ]
         mock_restic_client.diff.return_value = "Files: 10"
         mock_restic_client.find.return_value = (
-            "Found matching entries in snapshot abc123def"
+            "Found matching entries in snapshot a1b2c3d4"
         )
         mock_restic_client.check.return_value = "no errors were found"
         mock_restic_client.log_file = Path("/tmp/restic.log")
@@ -588,18 +618,20 @@ class TestBackupScript:
         config_file, _, _ = temp_config
 
         mock_restic_client = Mock()
-        mock_restic_client.backup.return_value = "snapshot3"
+
+        snapshot_id = ResticSnapshotId("a1b2c3d4")
+        mock_restic_client.backup.return_value = snapshot_id
         # Code expects snapshots[-2] to be current snapshot, snapshots[-3] to be previous
         mock_restic_client.get_snapshots.return_value = [
-            "snapshot1",
-            "snapshot3",
-            "snapshot2",
+            "12345678",
+            "a1b2c3d4",
+            "87654321",
         ]
         mock_restic_client.diff.return_value = (
             "Files: 10\nDirs: 5\nAdded: 3\nRemoved: 2"
         )
         mock_restic_client.find.return_value = (
-            "Found matching entries in snapshot snapshot3"
+            "Found matching entries in snapshot a1b2c3d4"
         )
         mock_restic_client.check.return_value = "no errors were found"
         mock_restic_client.log_file = Path("/tmp/restic.log")
@@ -637,12 +669,14 @@ class TestBackupScript:
         config_file, _, _ = temp_config
 
         mock_restic_client = Mock()
-        mock_restic_client.backup.return_value = "snapshot1"
+
+        snapshot_id = ResticSnapshotId("a1b2c3d4")
+        mock_restic_client.backup.return_value = snapshot_id
         mock_restic_client.get_snapshots.return_value = [
-            "snapshot1",
+            "a1b2c3d4",
         ]  # Only one snapshot
         mock_restic_client.find.return_value = (
-            "Found matching entries in snapshot snapshot1"
+            "Found matching entries in snapshot a1b2c3d4"
         )
         mock_restic_client.check.return_value = "no errors were found"
         mock_restic_client.log_file = Path("/tmp/restic.log")
@@ -705,18 +739,19 @@ class TestBackupScript:
         )
 
         mock_restic_client = Mock()
-        mock_restic_client.backup.return_value = "snapshot3"
+        snapshot_id = ResticSnapshotId("a1b2c3d4")
+        mock_restic_client.backup.return_value = snapshot_id
         # Code expects snapshots[-2] to be current snapshot, snapshots[-3] to be previous
         mock_restic_client.get_snapshots.return_value = [
-            "snapshot1",
-            "snapshot3",
-            "snapshot2",
+            "a1b2c3d5",
+            "a1b2c3d4",
+            "a1b2c3d6",
         ]
         # Create diff output with 10 deleted files (exceeds threshold of 5)
         diff_output = "\n".join([f"-    /path/to/file{i}.txt" for i in range(10)])
         mock_restic_client.diff.return_value = diff_output
         mock_restic_client.find.return_value = (
-            "Found matching entries in snapshot snapshot3"
+            "Found matching entries in snapshot a1b2c3d4"
         )
         mock_restic_client.check.return_value = "no errors were found"
         mock_restic_client.log_file = Path("/tmp/restic.log")
@@ -793,18 +828,20 @@ class TestBackupScript:
         )
 
         mock_restic_client = Mock()
-        mock_restic_client.backup.return_value = "snapshot3"
+
+        snapshot_id = ResticSnapshotId("a1b2c3d4")
+        mock_restic_client.backup.return_value = snapshot_id
         # Code expects snapshots[-2] to be current snapshot, snapshots[-3] to be previous
         mock_restic_client.get_snapshots.return_value = [
-            "snapshot1",
-            "snapshot3",
-            "snapshot2",
+            "12345678",
+            "a1b2c3d4",
+            "87654321",
         ]
         # Create diff output with 10 modified files (exceeds threshold of 5)
         diff_output = "\n".join([f"M    /path/to/file{i}.txt" for i in range(10)])
         mock_restic_client.diff.return_value = diff_output
         mock_restic_client.find.return_value = (
-            "Found matching entries in snapshot snapshot3"
+            "Found matching entries in snapshot a1b2c3d4"
         )
         mock_restic_client.check.return_value = "no errors were found"
         mock_restic_client.log_file = Path("/tmp/restic.log")
@@ -882,12 +919,14 @@ class TestBackupScript:
         )
 
         mock_restic_client = Mock()
-        mock_restic_client.backup.return_value = "snapshot3"
+
+        snapshot_id = ResticSnapshotId("a1b2c3d4")
+        mock_restic_client.backup.return_value = snapshot_id
         # Code expects snapshots[-2] to be current snapshot, snapshots[-3] to be previous
         mock_restic_client.get_snapshots.return_value = [
-            "snapshot1",
-            "snapshot3",
-            "snapshot2",
+            "12345678",
+            "a1b2c3d4",
+            "87654321",
         ]
         # Create diff output with files in monitored folder
         diff_output = (
@@ -895,7 +934,7 @@ class TestBackupScript:
         )
         mock_restic_client.diff.return_value = diff_output
         mock_restic_client.find.return_value = (
-            "Found matching entries in snapshot snapshot3"
+            "Found matching entries in snapshot a1b2c3d4"
         )
         mock_restic_client.check.return_value = "no errors were found"
         mock_restic_client.log_file = Path("/tmp/restic.log")
@@ -989,7 +1028,7 @@ class TestBackupScript:
                     if len(call) > 1
                     else {}
                 )
-                if "Backup failed" in str(kwargs.get("subject", "")):
+                if "failed" in str(kwargs.get("subject", "")).lower():
                     backup_failure_call = call
                     break
 

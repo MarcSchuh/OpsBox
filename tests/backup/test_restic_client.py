@@ -10,6 +10,7 @@ import pytest
 
 from opsbox.backup.exceptions import ResticCommandFailedError, SnapshotIDNotFoundError
 from opsbox.backup.restic_client import ResticClient
+from opsbox.backup.snapshot_id import ResticSnapshotId
 from opsbox.encrypted_mail import EncryptedMail
 
 
@@ -69,7 +70,7 @@ class TestResticClient:
 
         with tempfile.TemporaryDirectory() as temp_dir:
             log_file = Path(temp_dir) / "restic.log"
-            log_file.write_text("backup output\nsnapshot abc123def created\n")
+            log_file.write_text("backup output\nsnapshot a1b2c3d4 created\n")
 
             with patch.object(restic_client, "log_file", log_file):
                 with patch.object(
@@ -79,7 +80,7 @@ class TestResticClient:
                 ):
                     snapshot_id = restic_client.backup("/backup/source", ["*.tmp"])
 
-                    assert snapshot_id == "abc123def"
+                    assert snapshot_id == "a1b2c3d4"
                     restic_client.logger.info.assert_called()
 
     def test_backup_failure(self, restic_client) -> None:
@@ -125,18 +126,18 @@ class TestResticClient:
         mock_result.returncode = 0
         mock_result.stdout = (
             "ID        Time                 Host\n"
-            "abc123def 2024-01-01 12:00:00  host1\n"
-            "def456ghi 2024-01-02 12:00:00  host2\n"
-            "ghi789jkl 2024-01-03 12:00:00  host3\n"
+            "a1b2c3d4 2024-01-01 12:00:00  host1\n"
+            "e5f6a7b8 2024-01-02 12:00:00  host2\n"
+            "c9d0e1f2 2024-01-03 12:00:00  host3\n"
         )
 
         with patch.object(restic_client, "_run_command", return_value=mock_result):
             snapshots = restic_client.get_snapshots()
 
             assert len(snapshots) == 3
-            assert "abc123def" in snapshots
-            assert "def456ghi" in snapshots
-            assert "ghi789jkl" in snapshots
+            assert "a1b2c3d4" in snapshots
+            assert "e5f6a7b8" in snapshots
+            assert "c9d0e1f2" in snapshots
 
     def test_get_snapshots_failure(self, restic_client) -> None:
         """Test that ResticCommandFailedError is raised on get_snapshots failure."""
@@ -159,7 +160,10 @@ class TestResticClient:
         mock_result.stdout = "diff output between snapshots"
 
         with patch.object(restic_client, "_run_command", return_value=mock_result):
-            diff_output = restic_client.diff("snapshot1", "snapshot2")
+            diff_output = restic_client.diff(
+                ResticSnapshotId("a1b2c3d4"),
+                ResticSnapshotId("e5f6a7b8"),
+            )
 
             assert diff_output == "diff output between snapshots"
             restic_client.logger.info.assert_called()
@@ -174,7 +178,10 @@ class TestResticClient:
             side_effect=ResticCommandFailedError("Diff failed"),
         ):
             with pytest.raises(ResticCommandFailedError, match="Diff failed"):
-                restic_client.diff("snapshot1", "snapshot2")
+                restic_client.diff(
+                    ResticSnapshotId("a1b2c3d4"),
+                    ResticSnapshotId("e5f6a7b8"),
+                )
 
     def test_find_success(self, restic_client) -> None:
         """Test that find returns output when searching for files in snapshot."""
@@ -182,10 +189,10 @@ class TestResticClient:
 
         mock_result = Mock()
         mock_result.returncode = 0
-        mock_result.stdout = "Found matching entries in snapshot abc123def"
+        mock_result.stdout = "Found matching entries in snapshot a1b2c3d4"
 
         with patch.object(restic_client, "_run_command", return_value=mock_result):
-            find_output = restic_client.find("file.txt", "abc123def")
+            find_output = restic_client.find("file.txt", ResticSnapshotId("a1b2c3d4"))
 
             assert "Found matching entries" in find_output
 
@@ -199,7 +206,7 @@ class TestResticClient:
             side_effect=ResticCommandFailedError("Find failed"),
         ):
             with pytest.raises(ResticCommandFailedError, match="Find failed"):
-                restic_client.find("file.txt", "abc123def")
+                restic_client.find("file.txt", ResticSnapshotId("a1b2c3d4"))
 
     def test_forget_success(self, restic_client) -> None:
         """Test that forget executes successfully."""
@@ -328,17 +335,17 @@ class TestResticClient:
 
     def test_extract_snapshot_id_success(self, restic_client) -> None:
         """Test that snapshot ID is extracted correctly from output."""
-        output = "backup output\nsnapshot abc123def created\nmore output"
+        output = "backup output\nsnapshot a1b2c3d4 created\nmore output"
         snapshot_id = restic_client._extract_snapshot_id(output)
 
-        assert snapshot_id == "abc123def"
+        assert snapshot_id == "a1b2c3d4"
 
     def test_extract_snapshot_id_not_found(self, restic_client) -> None:
-        """Test that None is returned when snapshot ID cannot be extracted."""
+        """Test that SnapshotIDNotFoundError is raised when snapshot ID cannot be extracted."""
         output = "backup output without snapshot ID"
-        snapshot_id = restic_client._extract_snapshot_id(output)
 
-        assert snapshot_id is None
+        with pytest.raises(SnapshotIDNotFoundError, match="Could not find snapshot ID"):
+            restic_client._extract_snapshot_id(output)
 
     def test_run_command_timeout(self, restic_client) -> None:
         """Test that ResticCommandFailedError is raised on command timeout."""
