@@ -115,9 +115,9 @@ class TestBackupScript:
         # The code expects snapshots[-2] to be the current snapshot, so we need at least 3 snapshots
         # with the current one at index -2
         mock_restic_client.get_snapshots.return_value = [
-            "e5f6a7b8",
-            "a1b2c3d4",
-            "c9d0e1f2",
+            ResticSnapshotId("e5f6a7b8"),
+            ResticSnapshotId("a1b2c3d4"),
+            ResticSnapshotId("c9d0e1f2"),
         ]
         mock_restic_client.diff.return_value = "Files: 10\nDirs: 5"
         mock_restic_client.find.return_value = (
@@ -201,9 +201,9 @@ class TestBackupScript:
         snapshot_id = ResticSnapshotId("a1b2c3d4")
         mock_restic_client.backup.return_value = snapshot_id
         mock_restic_client.get_snapshots.return_value = [
-            "e5f6a7b8",
-            "a1b2c3d4",
-            "c9d0e1f2",
+            ResticSnapshotId("e5f6a7b8"),
+            ResticSnapshotId("a1b2c3d4"),
+            ResticSnapshotId("c9d0e1f2"),
         ]
         mock_restic_client.find.return_value = (
             "Found matching entries in snapshot a1b2c3d4"
@@ -277,9 +277,9 @@ class TestBackupScript:
         snapshot_id = ResticSnapshotId("a1b2c3d4")
         mock_restic_client.backup.return_value = snapshot_id
         mock_restic_client.get_snapshots.return_value = [
-            "e5f6a7b8",
-            "a1b2c3d4",
-            "c9d0e1f2",
+            ResticSnapshotId("e5f6a7b8"),
+            ResticSnapshotId("a1b2c3d4"),
+            ResticSnapshotId("c9d0e1f2"),
         ]
         mock_restic_client.find.return_value = (
             "Found matching entries in snapshot a1b2c3d4"
@@ -461,9 +461,9 @@ class TestBackupScript:
         snapshot_id = ResticSnapshotId("a1b2c3d4")
         mock_restic_client.backup.return_value = snapshot_id
         mock_restic_client.get_snapshots.return_value = [
-            "12345678",
-            "a1b2c3d4",
-            "87654321",
+            ResticSnapshotId("12345678"),
+            ResticSnapshotId("a1b2c3d4"),
+            ResticSnapshotId("87654321"),
         ]
         mock_restic_client.diff.return_value = "Files: 10"
         mock_restic_client.find.return_value = (
@@ -566,9 +566,9 @@ class TestBackupScript:
         snapshot_id = ResticSnapshotId("a1b2c3d4")
         mock_restic_client.backup.return_value = snapshot_id
         mock_restic_client.get_snapshots.return_value = [
-            "12345678",
-            "a1b2c3d4",
-            "87654321",
+            ResticSnapshotId("12345678"),
+            ResticSnapshotId("a1b2c3d4"),
+            ResticSnapshotId("87654321"),
         ]
         mock_restic_client.diff.return_value = "Files: 10"
         mock_restic_client.find.return_value = (
@@ -623,9 +623,9 @@ class TestBackupScript:
         mock_restic_client.backup.return_value = snapshot_id
         # Code expects snapshots[-2] to be current snapshot, snapshots[-3] to be previous
         mock_restic_client.get_snapshots.return_value = [
-            "12345678",
-            "a1b2c3d4",
-            "87654321",
+            ResticSnapshotId("12345678"),
+            ResticSnapshotId("a1b2c3d4"),
+            ResticSnapshotId("87654321"),
         ]
         mock_restic_client.diff.return_value = (
             "Files: 10\nDirs: 5\nAdded: 3\nRemoved: 2"
@@ -673,7 +673,7 @@ class TestBackupScript:
         snapshot_id = ResticSnapshotId("a1b2c3d4")
         mock_restic_client.backup.return_value = snapshot_id
         mock_restic_client.get_snapshots.return_value = [
-            "a1b2c3d4",
+            ResticSnapshotId("a1b2c3d4"),
         ]  # Only one snapshot
         mock_restic_client.find.return_value = (
             "Found matching entries in snapshot a1b2c3d4"
@@ -743,9 +743,9 @@ class TestBackupScript:
         mock_restic_client.backup.return_value = snapshot_id
         # Code expects snapshots[-2] to be current snapshot, snapshots[-3] to be previous
         mock_restic_client.get_snapshots.return_value = [
-            "a1b2c3d5",
-            "a1b2c3d4",
-            "a1b2c3d6",
+            ResticSnapshotId("a1b2c3d5"),
+            ResticSnapshotId("a1b2c3d4"),
+            ResticSnapshotId("a1b2c3d6"),
         ]
         # Create diff output with 10 deleted files (exceeds threshold of 5)
         diff_output = "\n".join([f"-    /path/to/file{i}.txt" for i in range(10)])
@@ -833,9 +833,9 @@ class TestBackupScript:
         mock_restic_client.backup.return_value = snapshot_id
         # Code expects snapshots[-2] to be current snapshot, snapshots[-3] to be previous
         mock_restic_client.get_snapshots.return_value = [
-            "12345678",
-            "a1b2c3d4",
-            "87654321",
+            ResticSnapshotId("12345678"),
+            ResticSnapshotId("a1b2c3d4"),
+            ResticSnapshotId("87654321"),
         ]
         # Create diff output with 10 modified files (exceeds threshold of 5)
         diff_output = "\n".join([f"M    /path/to/file{i}.txt" for i in range(10)])
@@ -924,9 +924,9 @@ class TestBackupScript:
         mock_restic_client.backup.return_value = snapshot_id
         # Code expects snapshots[-2] to be current snapshot, snapshots[-3] to be previous
         mock_restic_client.get_snapshots.return_value = [
-            "12345678",
-            "a1b2c3d4",
-            "87654321",
+            ResticSnapshotId("12345678"),
+            ResticSnapshotId("a1b2c3d4"),
+            ResticSnapshotId("87654321"),
         ]
         # Create diff output with files in monitored folder
         diff_output = (
