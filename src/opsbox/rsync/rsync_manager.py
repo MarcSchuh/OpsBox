@@ -2,6 +2,7 @@
 
 import argparse
 import getpass
+import hashlib
 import re
 import subprocess
 import sys
@@ -145,8 +146,9 @@ class RsyncManager:
         self.temp_dir = Path(tempfile.gettempdir())
         self.temp_dir.mkdir(parents=True, exist_ok=True)
 
-        # Setup lock file
-        self.lock_file_path = self.temp_dir / f"{self.script_name}.lock"
+        # Setup lock file - hash rsync_target to allow concurrent operations to different targets
+        target_hash = hashlib.sha256(self.config.rsync_target.encode()).hexdigest()[:8]
+        self.lock_file_path = self.temp_dir / f"{self.script_name}.{target_hash}.lock"
 
         # Setup log file path
         if self.config.log_file:
