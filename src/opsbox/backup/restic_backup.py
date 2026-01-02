@@ -83,18 +83,19 @@ class BackupScript:
         # Load and validate configuration
         self.config = ConfigManager.load_config(config_path)
 
-        # Setup logging
         self.script_name = Path(__file__).name
+        target_hash = self._get_target_hash(self.config.backup_target)
         self.logger = configure_logging(
-            LoggingConfig(log_name=self.script_name, log_level=log_level),
+            LoggingConfig(
+                log_name=f"{self.script_name}.{target_hash}",
+                log_level=log_level,
+            ),
         )
 
         # Setup temporary directory
         self.temp_dir = Path(temp_dir) if temp_dir else Path(tempfile.gettempdir())
         self.temp_dir.mkdir(parents=True, exist_ok=True)
 
-        # Setup lock file with hash of backup target to allow parallel execution
-        target_hash = self._get_target_hash(self.config.backup_target)
         self.lock_file_path = self.temp_dir / f"{self.script_name}.{target_hash}.lock"
 
         # Initialize components with dependency injection
