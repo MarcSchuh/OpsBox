@@ -718,11 +718,11 @@ class BackupScript:
 
             # Get the previous snapshot (second to last)
             # Convert snapshot IDs to ResticSnapshotId for comparison
-            current_snapshot = snapshots[-2]
+            current_snapshot = snapshots[-1]
             if current_snapshot != snapshot_id:
                 error_msg = f"Here I was expecting to find the current snapshot, but I found something else. Expected: {snapshot_id}, Found: {current_snapshot}"
                 raise SnapshotIDNotFoundError(error_msg)
-            previous_snapshot = snapshots[-3]
+            previous_snapshot = snapshots[-2]
 
             diff_output = self.restic_client.diff(previous_snapshot, snapshot_id)
 
