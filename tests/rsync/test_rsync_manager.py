@@ -9,6 +9,7 @@ import yaml
 
 from opsbox.backup.exceptions import (
     ConfigurationError,
+    FolderNotFoundError,
     NetworkUnreachableError,
     SSHKeyNotFoundError,
 )
@@ -176,6 +177,52 @@ class TestRsyncConfigValidation:
             )
 
         assert "Email settings file not found" in str(exc_info.value)
+
+    def test_config_exclude_file_not_exists(self) -> None:
+        """Test raises FolderNotFoundError when exclude_file doesn't exist."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            email_settings = self._create_test_email_settings(temp_path)
+
+            with pytest.raises(FolderNotFoundError):
+                RsyncConfig(
+                    rsync_source="user@host:/source",
+                    rsync_target="/target",
+                    email_settings_path=email_settings,
+                    exclude_file=Path("/nonexistent/exclude.txt"),
+                )
+
+    def test_config_exclude_file_optional(self) -> None:
+        """Test that exclude_file is optional and None is valid."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            email_settings = self._create_test_email_settings(temp_path)
+
+            config = RsyncConfig(
+                rsync_source="user@host:/source",
+                rsync_target="/target",
+                email_settings_path=email_settings,
+                exclude_file=None,
+            )
+
+            assert config.exclude_file is None
+
+    def test_config_exclude_file_valid(self) -> None:
+        """Test that exclude_file is accepted when file exists."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            email_settings = self._create_test_email_settings(temp_path)
+            exclude_file = temp_path / "exclude.txt"
+            exclude_file.write_text("*.tmp\n*.log\n")
+
+            config = RsyncConfig(
+                rsync_source="user@host:/source",
+                rsync_target="/target",
+                email_settings_path=email_settings,
+                exclude_file=exclude_file,
+            )
+
+            assert config.exclude_file == exclude_file
 
 
 class TestRsyncManagerInitialization:
@@ -349,6 +396,89 @@ class TestRsyncManagerInitialization:
 
             assert "Missing required configuration field" in str(exc_info.value)
 
+    @patch("opsbox.rsync.rsync_manager.configure_logging")
+    @patch("opsbox.rsync.rsync_manager.EncryptedMail")
+    @patch("opsbox.rsync.rsync_manager.LockManager")
+    @patch("opsbox.rsync.rsync_manager.NetworkChecker")
+    @patch("opsbox.rsync.rsync_manager.SSHManager")
+    def test_initialization_with_exclude_file(
+        self,
+        mock_ssh_manager: MagicMock,
+        mock_network_checker: MagicMock,
+        mock_lock_manager: MagicMock,
+        mock_encrypted_mail: MagicMock,
+        mock_configure_logging: MagicMock,
+    ) -> None:
+        """Test initializes successfully with exclude_file in config."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            email_settings = self._create_test_email_settings(temp_path)
+            exclude_file = temp_path / "exclude.txt"
+            exclude_file.write_text("*.tmp\n*.log\n")
+
+            config_data = {
+                "rsync_source": "user@host:/source",
+                "rsync_target": str(temp_path / "target"),
+                "email_settings_path": str(email_settings),
+                "exclude_file": str(exclude_file),
+            }
+            config_file = self._create_test_config_file(
+                temp_path,
+                email_settings,
+                config_data,
+            )
+
+            target_dir = temp_path / "target"
+            target_dir.mkdir()
+
+            mock_logger = Mock()
+            mock_configure_logging.return_value = mock_logger
+
+            manager = RsyncManager(config_path=config_file, log_level="INFO")
+
+            assert manager.config.exclude_file == exclude_file
+
+    @patch("opsbox.rsync.rsync_manager.configure_logging")
+    @patch("opsbox.rsync.rsync_manager.EncryptedMail")
+    @patch("opsbox.rsync.rsync_manager.LockManager")
+    @patch("opsbox.rsync.rsync_manager.NetworkChecker")
+    @patch("opsbox.rsync.rsync_manager.SSHManager")
+    def test_initialization_with_exclude_file_not_exists(
+        self,
+        mock_ssh_manager: MagicMock,
+        mock_network_checker: MagicMock,
+        mock_lock_manager: MagicMock,
+        mock_encrypted_mail: MagicMock,
+        mock_configure_logging: MagicMock,
+    ) -> None:
+        """Test raises FolderNotFoundError when exclude_file in config doesn't exist."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            email_settings = self._create_test_email_settings(temp_path)
+
+            config_data = {
+                "rsync_source": "user@host:/source",
+                "rsync_target": str(temp_path / "target"),
+                "email_settings_path": str(email_settings),
+                "exclude_file": "/nonexistent/exclude.txt",
+            }
+            config_file = self._create_test_config_file(
+                temp_path,
+                email_settings,
+                config_data,
+            )
+
+            target_dir = temp_path / "target"
+            target_dir.mkdir()
+
+            mock_logger = Mock()
+            mock_configure_logging.return_value = mock_logger
+
+            with pytest.raises(ConfigurationError) as exc_info:
+                RsyncManager(config_path=config_file, log_level="INFO")
+
+            assert "Exclude file not found" in str(exc_info.value)
+
 
 class TestRsyncCommandBuilding:
     """Test cases for rsync command building."""
@@ -462,6 +592,69 @@ class TestRsyncCommandBuilding:
 
             log_file_index = cmd.index("--log-file")
             assert cmd[log_file_index + 1] == str(manager.log_file_path)
+
+    def test_build_rsync_command_with_exclude_file(self) -> None:
+        """Test includes exclude-from option when exclude_file is configured."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            exclude_file = temp_path / "exclude.txt"
+            exclude_file.write_text("*.tmp\n*.log\n")
+
+            config_data = {
+                "rsync_source": "user@host:/source",
+                "rsync_target": str(temp_path / "target"),
+                "email_settings_path": str(temp_path / "email_settings.yaml"),
+                "exclude_file": str(exclude_file),
+            }
+            manager = self._create_test_manager(temp_path, config_data)
+
+            cmd = manager._build_rsync_command()
+
+            assert "--exclude-from" in cmd
+            exclude_index = cmd.index("--exclude-from")
+            assert cmd[exclude_index + 1] == str(exclude_file)
+
+    def test_build_rsync_command_without_exclude_file(self) -> None:
+        """Test does not include exclude-from option when exclude_file is not configured."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            manager = self._create_test_manager(temp_path)
+
+            cmd = manager._build_rsync_command()
+
+            assert "--exclude-from" not in cmd
+
+    def test_build_rsync_command_with_exclude_file_and_other_options(self) -> None:
+        """Test exclude-from works correctly with other rsync options."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            exclude_file = temp_path / "exclude.txt"
+            exclude_file.write_text("*.tmp\n*.log\n")
+
+            config_data = {
+                "rsync_source": "user@host:/source",
+                "rsync_target": str(temp_path / "target"),
+                "email_settings_path": str(temp_path / "email_settings.yaml"),
+                "exclude_file": str(exclude_file),
+                "rsync_options": {
+                    "chown": "user:group",
+                    "delete": True,
+                    "progress": True,
+                },
+            }
+            manager = self._create_test_manager(temp_path, config_data)
+
+            cmd = manager._build_rsync_command()
+
+            # Verify all options are present
+            assert "--exclude-from" in cmd
+            assert "--chown" in cmd
+            assert "--delete" in cmd
+            assert "--progress" in cmd
+            # Verify exclude-from comes before log-file (as per implementation)
+            exclude_index = cmd.index("--exclude-from")
+            log_file_index = cmd.index("--log-file")
+            assert exclude_index < log_file_index
 
 
 class TestRsyncUtilityFunctions:

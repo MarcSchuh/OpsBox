@@ -43,5 +43,9 @@ rsync_options:
   # Show progress during transfer
   progress: true
 
+# Optional: Path to file containing patterns to exclude from sync (one pattern per line)
+# If specified, the file must exist or a FolderNotFoundError will be raised
+exclude_file: null # e.g., "/home/ben/exclude_me.txt"
+
 # Optional: Title for the rsync operation (defaults to "Default rsync title")
 rsync_title: "Default rsync title"
