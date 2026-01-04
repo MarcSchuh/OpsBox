@@ -55,7 +55,7 @@ class BackupScript:
     """Refactored backup script with improved architecture and error handling."""
 
     MIN_SNAPSHOTS_FOR_DIFF = 2
-    MAX_FILES_IN_EMAIL = 100
+    MAX_FILES_IN_EMAIL = 200
 
     def __init__(
         self,

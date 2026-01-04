@@ -18,6 +18,7 @@ import yaml
 
 from opsbox.backup.exceptions import (
     ConfigurationError,
+    FolderNotFoundError,
     NetworkUnreachableError,
     SSHKeyNotFoundError,
     UserDoesNotExistError,
@@ -74,6 +75,7 @@ class RsyncConfig:
     rsync_title: str = "Default rsync title"
     rsync_options: dict[str, Any] = field(default_factory=dict)
     default_user: str = field(default_factory=lambda: getpass.getuser())
+    exclude_file: Path | None = None
 
     def __post_init__(self) -> None:
         """Validate configuration after initialization."""
@@ -113,6 +115,9 @@ class RsyncConfig:
         if not self.email_settings_path.exists():
             error_msg = f"Email settings file not found: {self.email_settings_path}"
             raise ConfigurationError(error_msg)
+        if self.exclude_file is not None and not self.exclude_file.exists():
+            error_msg = f"Exclude file not found: {self.exclude_file}"
+            raise FolderNotFoundError(error_msg)
 
 
 class RsyncManager:
@@ -207,6 +212,7 @@ class RsyncManager:
 
         try:
             # Create RsyncConfig instance with validation
+            exclude_file = config_data.get("exclude_file")
             return RsyncConfig(
                 rsync_source=config_data["rsync_source"],
                 rsync_target=config_data["rsync_target"],
@@ -220,6 +226,7 @@ class RsyncManager:
                 rsync_options=config_data.get("rsync_options", {}),
                 default_user=config_data.get("default_user", getpass.getuser()),
                 rsync_title=config_data.get("rsync_title", "Default rsync title"),
+                exclude_file=Path(exclude_file) if exclude_file else None,
             )
 
         except KeyError as e:
@@ -290,6 +297,10 @@ class RsyncManager:
 
         if self.config.rsync_options.get("progress", False):
             cmd.append("--progress")
+
+        # Add exclude file if specified
+        if self.config.exclude_file is not None:
+            cmd.extend(["--exclude-from", str(self.config.exclude_file)])
 
         # Add log file
         cmd.extend(["--log-file", str(self.log_file_path)])

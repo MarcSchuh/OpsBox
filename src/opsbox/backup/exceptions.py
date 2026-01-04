@@ -89,3 +89,7 @@ class DiffParsingError(BackupError):
 
 class InvalidSnapshotIDError(BackupError):
     """Raised when snapshot ID format is invalid."""
+
+
+class FolderNotFoundError(BackupError):
+    """Raised when a required folder or file is not found."""
