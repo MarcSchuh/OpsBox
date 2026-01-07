@@ -1,0 +1,49 @@
+# Example configuration for health_monitor
+# Copy this file and adjust the values for your environment
+
+# Required: Path to email settings file (JSON or YAML)
+email_settings_path: "/path/to/your/email_settings.yaml"
+
+# Required: Title for the warning (used in encrypted email subject)
+warning_title: "Nextcloud Dropbox Data Check Failed"
+
+# Required: Command to check the condition
+# The command should return non-zero exit code or empty output if condition fails
+# For checking if directory has data, we check if output has more than just header lines
+# Note: Remove -it flags when running in scripts (they're for interactive mode)
+check_command:
+  - "/usr/bin/docker"
+  - "exec"
+  - "-u"
+  - "www-data"
+  - "nextcloud_app"
+  - "ls"
+  - "-l"
+  - "/data/external-storage"
+
+# Optional: Command to execute once when condition fails (remediation)
+# This command will only be executed once per failure (not on every check)
+remediation_command:
+  - "/usr/bin/docker"
+  - "exec"
+  - "nextcloud_app"
+  - "occ"
+  - "maintenance:mode"
+  - "--on"
+
+# Optional: Path to log file (defaults to temp directory)
+log_file: "/path/to/your/health_monitor.log"
+
+# Optional: Minimum number of lines expected in check command output (default: 1)
+# If check command output has fewer lines than this, condition is considered failed
+# For "ls -l" output, set to 2 to account for "total" line + at least one file
+min_output_lines: 2
+
+# Optional: Check if output contains specific text (alternative to min_output_lines)
+# If specified, condition passes if this text is found in output
+# If not specified, uses min_output_lines instead
+expected_output_contains: null # e.g., "total"
+
+# Optional: Invert the condition check
+# If true, condition passes when check fails (useful for error checking)
+invert_check: false

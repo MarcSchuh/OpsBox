@@ -34,6 +34,10 @@ applies_to: ["*.py", "**/*.py"]
 ### Design Patterns
 
 - Use simple, standard Python patterns
+- **Avoid positional return values**: When a function returns multiple values, avoid relying on
+  positional unpacking (e.g., `return value1, value2`). Instead, use NamedTuples, dataclasses,
+  TypedDict, or Pydantic models to make return values self-documenting and less error-prone.
+  This prevents bugs from incorrect unpacking order and improves code readability.
 - Avoid over-engineering with unnecessary design patterns
 - Prefer functions over classes when appropriate
 - Use dataclasses or NamedTuples for simple data structures
