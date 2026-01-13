@@ -76,6 +76,10 @@ class RsyncConfig:
     rsync_options: dict[str, Any] = field(default_factory=dict)
     default_user: str = field(default_factory=lambda: getpass.getuser())
     exclude_file: Path | None = None
+    log_rotate_on_start: bool = True  # Rotate log file at the start of each run
+    log_keep_lines: int = (
+        10  # Number of rotated log files to keep (log.1, log.2, ..., log.N)
+    )
 
     def __post_init__(self) -> None:
         """Validate configuration after initialization."""
@@ -227,6 +231,8 @@ class RsyncManager:
                 default_user=config_data.get("default_user", getpass.getuser()),
                 rsync_title=config_data.get("rsync_title", "Default rsync title"),
                 exclude_file=Path(exclude_file) if exclude_file else None,
+                log_rotate_on_start=config_data.get("log_rotate_on_start", True),
+                log_keep_lines=int(config_data.get("log_keep_lines", 10)),
             )
 
         except KeyError as e:
@@ -466,6 +472,58 @@ class RsyncManager:
         hours = seconds / Constants.SECONDS_PER_HOUR.value
         return f"{hours:.2f} hours"
 
+    def _rotate_log_file(self) -> None:
+        """Rotate log file by keeping the last N log files.
+
+        If log_rotate_on_start is True, this method will rotate the log file,
+        keeping up to log_keep_lines rotated versions (log.1, log.2, ..., log.N).
+        """
+        if not self.config.log_rotate_on_start:
+            return
+
+        if not self.log_file_path.exists():
+            return
+
+        try:
+            # Rotate existing log files: log.9 -> log.10, log.8 -> log.9, etc.
+            # Start from the highest number and work backwards
+            for i in range(self.config.log_keep_lines - 1, 0, -1):
+                old_file = self.log_file_path.with_suffix(
+                    self.log_file_path.suffix + f".{i}",
+                )
+                new_file = self.log_file_path.with_suffix(
+                    self.log_file_path.suffix + f".{i + 1}",
+                )
+                if old_file.exists():
+                    if new_file.exists():
+                        new_file.unlink()
+                    old_file.rename(new_file)
+
+            # Move current log file to log.1
+            rotated_file = self.log_file_path.with_suffix(
+                self.log_file_path.suffix + ".1",
+            )
+            if rotated_file.exists():
+                rotated_file.unlink()
+            self.log_file_path.rename(rotated_file)
+
+            # Delete the oldest log file if we exceed the limit
+            oldest_file = self.log_file_path.with_suffix(
+                self.log_file_path.suffix + f".{self.config.log_keep_lines + 1}",
+            )
+            if oldest_file.exists():
+                oldest_file.unlink()
+
+            # Create new empty log file
+            self.log_file_path.touch()
+
+            self.logger.info(
+                f"Rotated log file, keeping last {self.config.log_keep_lines} log files",
+            )
+
+        except Exception as e:
+            self.logger.warning(f"Failed to rotate log file: {e}")
+
     def _run_rsync_attempt(self, cmd: list[str]) -> None:
         """Run a single rsync attempt.
 
@@ -503,6 +561,9 @@ class RsyncManager:
 
         """
         self.logger.info("Starting rsync operation")
+
+        # Rotate log file before starting rsync (if enabled)
+        self._rotate_log_file()
 
         cmd = self._build_rsync_command()
         start_time = time.time()

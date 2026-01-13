@@ -13,6 +13,12 @@ email_settings_path: "/path/to/your/email_settings.yaml"
 # Optional: Path to log file (defaults to temp directory)
 log_file: "/path/to/your/rsync.log"
 
+# Optional: Rotate log file at the start of each run, keeping last N log files (default: true)
+log_rotate_on_start: true
+
+# Optional: Number of rotated log files to keep (log.1, log.2, ..., log.N) (default: 10)
+log_keep_lines: 10
+
 # Optional: Maximum number of rsync retry attempts (default: 3)
 rsync_retry_max: 3
 

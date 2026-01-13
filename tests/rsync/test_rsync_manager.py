@@ -1259,3 +1259,279 @@ class TestRsyncManagerCLI:
             mock_rsync_manager.assert_called_once()
             call_args = mock_rsync_manager.call_args
             assert call_args.kwargs["log_level"] == "DEBUG"
+
+
+class TestRsyncLogRotation:
+    """Test cases for log file rotation functionality."""
+
+    def _create_test_manager(
+        self,
+        temp_dir: Path,
+        config_data: dict | None = None,
+    ) -> RsyncManager:
+        """Create a test RsyncManager instance."""
+        email_settings = temp_dir / "email_settings.yaml"
+        email_settings.write_text("test: settings")
+
+        if config_data is None:
+            config_data = {
+                "rsync_source": "user@host:/source",
+                "rsync_target": str(temp_dir / "target"),
+                "email_settings_path": str(email_settings),
+            }
+
+        config_file = temp_dir / "config.yaml"
+        config_file.write_text(yaml.dump(config_data))
+
+        target_dir = temp_dir / "target"
+        target_dir.mkdir()
+
+        with (
+            patch("opsbox.rsync.rsync_manager.configure_logging") as mock_logging,
+            patch("opsbox.rsync.rsync_manager.EncryptedMail"),
+            patch("opsbox.rsync.rsync_manager.LockManager"),
+            patch("opsbox.rsync.rsync_manager.NetworkChecker"),
+            patch("opsbox.rsync.rsync_manager.SSHManager"),
+        ):
+            mock_logging.return_value = Mock()
+            return RsyncManager(config_path=config_file, log_level="INFO")
+
+    def test_log_rotate_on_start_defaults_to_true(self) -> None:
+        """Test that log_rotate_on_start defaults to True."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            manager = self._create_test_manager(temp_path)
+
+            assert manager.config.log_rotate_on_start is True
+
+    def test_log_keep_lines_defaults_to_10(self) -> None:
+        """Test that log_keep_lines defaults to 10."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            manager = self._create_test_manager(temp_path)
+
+            assert manager.config.log_keep_lines == 10
+
+    def test_log_rotation_creates_rotated_file(self) -> None:
+        """Test that log rotation creates log.1 from existing log file."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            manager = self._create_test_manager(temp_path)
+
+            # Create existing log file
+            log_content = "line 1\nline 2\nline 3\n"
+            manager.log_file_path.write_text(log_content)
+
+            # Rotate the log
+            manager._rotate_log_file()
+
+            # Check that log.1 exists with original content
+            rotated_file = manager.log_file_path.with_suffix(
+                manager.log_file_path.suffix + ".1",
+            )
+            assert rotated_file.exists()
+            assert rotated_file.read_text() == log_content
+
+            # Check that new log file exists and is empty
+            assert manager.log_file_path.exists()
+            assert manager.log_file_path.read_text() == ""
+
+    def test_log_rotation_shifts_existing_rotated_files(self) -> None:
+        """Test that log rotation shifts existing rotated files."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            manager = self._create_test_manager(temp_path)
+
+            # Create existing log and rotated files
+            manager.log_file_path.write_text("current log\n")
+            log_1 = manager.log_file_path.with_suffix(
+                manager.log_file_path.suffix + ".1",
+            )
+            log_1.write_text("old log 1\n")
+            log_2 = manager.log_file_path.with_suffix(
+                manager.log_file_path.suffix + ".2",
+            )
+            log_2.write_text("old log 2\n")
+
+            # Rotate the log
+            manager._rotate_log_file()
+
+            # Check that files were shifted
+            log_3 = manager.log_file_path.with_suffix(
+                manager.log_file_path.suffix + ".3",
+            )
+            assert log_3.exists()
+            assert log_3.read_text() == "old log 2\n"
+
+            log_2_new = manager.log_file_path.with_suffix(
+                manager.log_file_path.suffix + ".2",
+            )
+            assert log_2_new.exists()
+            assert log_2_new.read_text() == "old log 1\n"
+
+            log_1_new = manager.log_file_path.with_suffix(
+                manager.log_file_path.suffix + ".1",
+            )
+            assert log_1_new.exists()
+            assert log_1_new.read_text() == "current log\n"
+
+    def test_log_rotation_deletes_oldest_when_exceeding_limit(self) -> None:
+        """Test that log rotation deletes oldest file when exceeding limit."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            config_data = {
+                "rsync_source": "user@host:/source",
+                "rsync_target": str(temp_path / "target"),
+                "email_settings_path": str(temp_path / "email_settings.yaml"),
+                "log_keep_lines": 3,  # Keep only 3 rotated files
+            }
+            manager = self._create_test_manager(temp_path, config_data)
+
+            # Create existing log and rotated files up to limit
+            manager.log_file_path.write_text("current log\n")
+            for i in range(1, 4):  # Create log.1, log.2, log.3
+                rotated = manager.log_file_path.with_suffix(
+                    manager.log_file_path.suffix + f".{i}",
+                )
+                rotated.write_text(f"old log {i}\n")
+
+            # Rotate the log
+            manager._rotate_log_file()
+
+            # Check that log.4 (oldest) was deleted
+            log_4 = manager.log_file_path.with_suffix(
+                manager.log_file_path.suffix + ".4",
+            )
+            assert not log_4.exists()
+
+            # Check that log.3 still exists (was log.2 before)
+            log_3 = manager.log_file_path.with_suffix(
+                manager.log_file_path.suffix + ".3",
+            )
+            assert log_3.exists()
+
+    def test_log_rotation_disabled_does_nothing(self) -> None:
+        """Test that log rotation does nothing when disabled."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            config_data = {
+                "rsync_source": "user@host:/source",
+                "rsync_target": str(temp_path / "target"),
+                "email_settings_path": str(temp_path / "email_settings.yaml"),
+                "log_rotate_on_start": False,
+            }
+            manager = self._create_test_manager(temp_path, config_data)
+
+            # Create existing log file
+            log_content = "line 1\nline 2\nline 3\n"
+            manager.log_file_path.write_text(log_content)
+
+            # Rotate the log (should do nothing)
+            manager._rotate_log_file()
+
+            # Check that log file is unchanged
+            assert manager.log_file_path.exists()
+            assert manager.log_file_path.read_text() == log_content
+
+            # Check that no rotated files were created
+            rotated_file = manager.log_file_path.with_suffix(
+                manager.log_file_path.suffix + ".1",
+            )
+            assert not rotated_file.exists()
+
+    def test_log_rotation_no_existing_log_file(self) -> None:
+        """Test that log rotation handles missing log file gracefully."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            manager = self._create_test_manager(temp_path)
+
+            # Ensure log file doesn't exist
+            if manager.log_file_path.exists():
+                manager.log_file_path.unlink()
+
+            # Rotate the log (should do nothing)
+            manager._rotate_log_file()
+
+            # Check that no files were created
+            assert not manager.log_file_path.exists()
+            rotated_file = manager.log_file_path.with_suffix(
+                manager.log_file_path.suffix + ".1",
+            )
+            assert not rotated_file.exists()
+
+    def test_log_rotation_custom_keep_lines(self) -> None:
+        """Test that custom log_keep_lines value is respected."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            config_data = {
+                "rsync_source": "user@host:/source",
+                "rsync_target": str(temp_path / "target"),
+                "email_settings_path": str(temp_path / "email_settings.yaml"),
+                "log_keep_lines": 5,
+            }
+            manager = self._create_test_manager(temp_path, config_data)
+
+            assert manager.config.log_keep_lines == 5
+
+            # Create log file and rotate
+            manager.log_file_path.write_text("current log\n")
+            manager._rotate_log_file()
+
+            # Check that log.1 was created
+            log_1 = manager.log_file_path.with_suffix(
+                manager.log_file_path.suffix + ".1",
+            )
+            assert log_1.exists()
+
+            # Create rotated files up to limit (5)
+            for i in range(1, 6):
+                rotated = manager.log_file_path.with_suffix(
+                    manager.log_file_path.suffix + f".{i}",
+                )
+                rotated.write_text(f"old log {i}\n")
+
+            # Rotate again - should delete log.6 if it existed
+            manager.log_file_path.write_text("new current log\n")
+            manager._rotate_log_file()
+
+            # Check that log.6 doesn't exist (would be beyond limit of 5)
+            log_6 = manager.log_file_path.with_suffix(
+                manager.log_file_path.suffix + ".6",
+            )
+            assert not log_6.exists()
+
+    def test_log_rotation_called_before_rsync_execution(self) -> None:
+        """Test that log rotation is called before rsync execution."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            manager = self._create_test_manager(temp_path)
+
+            # Create existing log file
+            manager.log_file_path.write_text("old log content\n")
+
+            # Mock subprocess to avoid actual rsync execution
+            with (
+                patch("opsbox.rsync.rsync_manager.subprocess.run") as mock_subprocess,
+                patch("opsbox.rsync.rsync_manager.time.time") as mock_time,
+            ):
+                mock_time.side_effect = [0, 100]
+                mock_result = Mock()
+                mock_result.returncode = 0
+                mock_subprocess.return_value = mock_result
+
+                # Create log file with stats for parsing
+                manager.log_file_path.write_text(
+                    "sent 1,234 bytes  received 567 bytes\ntotal size is 1,801",
+                )
+
+                # Execute rsync (should rotate log first)
+                manager._execute_rsync()
+
+                # Check that log was rotated
+                log_1 = manager.log_file_path.with_suffix(
+                    manager.log_file_path.suffix + ".1",
+                )
+                # The log file should have been rotated, so log.1 should exist
+                # (Note: the actual rotation happens before rsync writes to log)
+                assert manager.log_file_path.exists()
+                assert log_1.exists()
