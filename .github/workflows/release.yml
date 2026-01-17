@@ -68,12 +68,13 @@ jobs:
           ./scripts/build_restic_backup.sh
           ./scripts/build_rsync_manager.sh
           ./scripts/build_health_monitor.sh
+          ./scripts/build_kvm_snapshot_manager.sh
 
       - name: Verify all builds
         run: |
           echo "Checking built executables..."
           ls -lh dist/
-          for exe in notifier check_mails db_backup encrypted_mail restic_backup rsync_manager health_monitor; do
+          for exe in notifier check_mails db_backup encrypted_mail restic_backup rsync_manager health_monitor kvm_snapshot_manager; do
             if [ ! -f "dist/$exe" ]; then
               echo "❌ Missing executable: dist/$exe"
               exit 1
@@ -118,6 +119,7 @@ jobs:
             - `restic_backup` - Restic backup utility
             - `rsync_manager` - Rsync management utility
             - `health_monitor` - Health monitoring utility
+            - `kvm_snapshot_manager` - KVM snapshot management utility
 
             ### Installation
             Download the executable you need and make it executable:
@@ -132,5 +134,6 @@ jobs:
             dist/restic_backup
             dist/rsync_manager
             dist/health_monitor
+            dist/kvm_snapshot_manager
           draft: false
           prerelease: false

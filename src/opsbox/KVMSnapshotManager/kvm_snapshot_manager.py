@@ -33,6 +33,17 @@ class LockConfig(Enum):
     DIR_NAME = "opsbox-kvm-locks"
 
 
+class CliConfig(Enum):
+    """Configuration values for command-line validation."""
+
+    MIN_REMAINING = ("min_remaining", 5)
+
+    @property
+    def number(self) -> int:
+        """Return the numeric configuration value."""
+        return self.value[1]
+
+
 def lock_path_for_base_image(base_image_path: Path) -> Path:
     """Build a lock file path for the given base image."""
     resolved_path = base_image_path.expanduser().resolve()
@@ -153,14 +164,13 @@ class KVMSnapshotManager:
         """Run a command with sudo using a prompted password."""
         if self.sudo_password is None:
             self.sudo_password = getpass.getpass(prompt="Enter sudo password: ")
-        sudo_password = self.sudo_password
-        if sudo_password is None:
+        if self.sudo_password is None:
             error_msg = "Failed to read sudo password."
             raise RuntimeError(error_msg)
 
         subprocess.run(  # noqa: S603
             ["sudo", "-S", *command],  # noqa: S607
-            input=sudo_password + "\n",  # Provide password via stdin
+            input=self.sudo_password + "\n",  # Provide password via stdin
             text=True,
             check=True,
         )
@@ -360,13 +370,16 @@ def main() -> None:
         default=False,
     )
     parser.add_argument(
-        "--remove-count",
-        help="Number of snapshots from the end of the chain to remove.",
+        "--remaining",
+        help="Number of snapshots to remain after removal (min 5).",
         type=int,
         required=True,
     )
 
     args = parser.parse_args()
+    if args.remaining < CliConfig.MIN_REMAINING.number:
+        error_msg = f"--remaining must be at least {CliConfig.MIN_REMAINING.number}."
+        raise ValueError(error_msg)
 
     log_handler = configure_logging(LoggingConfig(log_name="kvm_snapshot_manager"))
     base_image_path = Path(args.base_image).expanduser().resolve()
@@ -387,16 +400,16 @@ def main() -> None:
 
         head_snapshot_path = manager.extract_head_snapshot_path()
         snapshot_chain = manager.traverse_snapshot_chain(head_snapshot_path)
-        # Validate that at least (remove_count + 5) snapshots exist
-        if len(snapshot_chain) < (args.remove_count + 5):
+        remove_count = len(snapshot_chain) - args.remaining
+        if remove_count < 0:
             error_msg = (
-                f"Cannot remove {args.remove_count} snapshots; "
-                "at least 5 must remain in the chain."
+                f"Cannot keep {args.remaining} snapshots; "
+                f"only {len(snapshot_chain)} available."
             )
             raise ValueError(error_msg)
 
         # Remove the specified number of snapshots
-        for _ in range(args.remove_count):
+        for _ in range(remove_count):
             manager.commit_and_rebase_for_last_image(
                 snapshot_chain,
                 dryrun=args.dry_run,
