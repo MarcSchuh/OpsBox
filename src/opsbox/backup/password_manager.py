@@ -129,7 +129,7 @@ class PasswordManager:
         # Basic validation - password should be at least MIN_PASSWORD_LENGTH characters
         if len(password) < self.MIN_PASSWORD_LENGTH:
             self.logger.warning(
-                f"Password is shorter than recommended minimum length ({self.MIN_PASSWORD_LENGTH} characters)",
+                "Password is shorter than recommended minimum length (characters)",
             )
             return False
 
