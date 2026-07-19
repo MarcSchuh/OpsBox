@@ -163,7 +163,7 @@ class TestLockManager:
 
                 assert str(exc_info.value) == f"Lock file {lock_file} is already held."
                 assert lock_manager._lock_fd is None
-                logger.error.assert_called_once()
+                logger.exception.assert_called_once()
             finally:
                 os.close(holder_fd)
 
@@ -210,7 +210,7 @@ class TestLockManager:
                 with pytest.raises(LockAlreadyTakenError):
                     lock_manager.create_lock()
 
-                logger.error.assert_called_once()
+                logger.exception.assert_called_once()
             finally:
                 os.close(holder_fd)
 
