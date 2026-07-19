@@ -31,9 +31,18 @@ class BackupConfig:
     keep_daily: str = "21"
     keep_monthly: str = "5"
     ssh_key_max_retries: int = 12
-    detailed_report: bool = True
     restic_password: str | None = None
     backup_title: str = "Default backupt title"
+
+    # Minimum number of entries the backup source must contain. The backup is
+    # aborted if fewer entries are found (protects against unmounted/empty
+    # sources). Defaults to 1, i.e. abort only when the source is completely empty.
+    min_source_entries: int = 1
+
+    # Fraction of the repository data that "restic check" re-reads and verifies
+    # during maintenance (e.g. "20%", "100%", "1G"). Higher values verify more
+    # data at the cost of runtime.
+    check_read_data_subset: str = "20%"
 
     # Network and SSH fields
     network_host: str | None = None
@@ -44,6 +53,7 @@ class BackupConfig:
     # Threshold fields for warning emails
     deletion_threshold: int | None = None
     alteration_threshold: int | None = None
+    addition_threshold: int | None = None
 
     # Monitored folders for change alerts
     monitored_folders: list[str] = field(default_factory=list)
@@ -54,6 +64,32 @@ class BackupConfig:
         self._validate_ssh_configuration()
         self._validate_paths()
         self._validate_retention_policy()
+        self._validate_source_and_thresholds()
+
+    def _validate_source_and_thresholds(self) -> None:
+        """Validate the source-entry minimum and change-count thresholds."""
+        if not isinstance(self.min_source_entries, int) or self.min_source_entries < 0:
+            error_msg = (
+                f"'min_source_entries' must be a non-negative integer, "
+                f"got: {self.min_source_entries!r}"
+            )
+            raise InvalidResticConfigError(error_msg)
+
+        for name in (
+            "deletion_threshold",
+            "alteration_threshold",
+            "addition_threshold",
+        ):
+            value = getattr(self, name)
+            if value is not None and (not isinstance(value, int) or value < 0):
+                error_msg = (
+                    f"'{name}' must be a non-negative integer or null, got: {value!r}"
+                )
+                raise InvalidResticConfigError(error_msg)
+
+        if not str(self.check_read_data_subset).strip():
+            error_msg = "'check_read_data_subset' must be a non-empty value"
+            raise InvalidResticConfigError(error_msg)
 
     def _validate_required_fields(self) -> None:
         """Validate that all required fields are present and non-empty."""
@@ -195,11 +231,16 @@ class ConfigManager:
                 ssh_key_max_retries=int(config_data.get("ssh_key_max_retries", 12)),
                 restic_password=config_data.get("restic_password"),
                 user_id=config_data.get("user_id", os.getuid()),
-                detailed_report=config_data.get("detailed_report", True),
                 deletion_threshold=config_data.get("deletion_threshold"),
                 alteration_threshold=config_data.get("alteration_threshold"),
+                addition_threshold=config_data.get("addition_threshold"),
                 monitored_folders=config_data.get("monitored_folders", []),
                 backup_title=config_data.get("backup_title", "Default backup title"),
+                min_source_entries=int(config_data.get("min_source_entries", 1)),
+                check_read_data_subset=config_data.get(
+                    "check_read_data_subset",
+                    "20%",
+                ),
             )
 
         except KeyError as e:
@@ -238,7 +279,6 @@ class ConfigManager:
             "keep_daily": "21",
             "keep_monthly": "5",
             "ssh_key_max_retries": 12,
-            "detailed_report": True,
             "network_host": None,
             "ssh_key": None,
             "ssh_user": None,
@@ -246,5 +286,8 @@ class ConfigManager:
             "user_id": None,
             "deletion_threshold": None,  # Send warning if more than this many files deleted
             "alteration_threshold": None,  # Send warning if more than this many files altered
+            "addition_threshold": None,  # Send warning if more than this many files added
             "monitored_folders": [],  # List of folders to monitor for changes
+            "min_source_entries": 1,  # Abort backup if source has fewer entries
+            "check_read_data_subset": "20%",  # Portion of data verified by restic check
         }

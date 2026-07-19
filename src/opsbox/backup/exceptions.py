@@ -31,6 +31,15 @@ class ResticEnvNotSetError(BackupEnvironmentError):
     """Raised when restic environment is not properly configured."""
 
 
+class EmptySourceError(BackupEnvironmentError):
+    """Raised when the backup source is missing or (near) empty.
+
+    Guards against backing up an unmounted or empty source directory, which
+    would otherwise create an almost empty snapshot and risk data loss once
+    old snapshots are pruned.
+    """
+
+
 class SecurityError(BackupError):
     """Raised when there are security-related issues."""
 
@@ -69,6 +78,15 @@ class ResticBackupFailedError(ResticError):
 
 class ResticCommandFailedError(ResticError):
     """Raised when any restic command fails."""
+
+
+class ResticRepositoryLockedError(ResticCommandFailedError):
+    """Raised when a restic command fails because the repository is locked.
+
+    Subclasses :class:`ResticCommandFailedError` so existing handlers keep
+    working, while allowing callers to react specifically (e.g. run
+    ``restic unlock`` to remove stale locks and retry once).
+    """
 
 
 class SnapshotIDNotFoundError(ResticError):

@@ -1,5 +1,6 @@
 """Restic client for executing restic commands with proper error handling and logging."""
 
+import json
 import logging
 import subprocess
 import tempfile
@@ -7,45 +8,73 @@ from pathlib import Path
 
 from opsbox.backup.exceptions import (
     ResticCommandFailedError,
+    ResticRepositoryLockedError,
     SnapshotIDNotFoundError,
 )
 from opsbox.backup.snapshot_id import ResticSnapshotId
-from opsbox.encrypted_mail import EncryptedMail
+
+# Substrings restic prints (to stderr/log) when a repository lock blocks a
+# command. Matched case-insensitively so callers can react to stale locks.
+LOCK_ERROR_SIGNATURES = (
+    "repository is already locked",
+    "unable to create lock",
+)
+
+
+def is_lock_error(text: str | None) -> bool:
+    """Return True if ``text`` looks like a restic repository-lock error."""
+    if not text:
+        return False
+    lowered = text.lower()
+    return any(sig in lowered for sig in LOCK_ERROR_SIGNATURES)
 
 
 class ResticClient:
-    """Handles all restic command execution with proper error handling and logging."""
+    """Handles all restic command execution with proper error handling and logging.
 
-    MIN_SNAPSHOT_ID_LENGTH = 7
-    MAX_SNAPSHOT_ID_LENGTH = 8
+    Does not send notifications: callers (e.g. ``BackupScript``) own alerting.
+    """
+
     SNAPSHOT_PARTS_MIN_LENGTH = 2
+
+    is_lock_error = staticmethod(is_lock_error)
 
     def __init__(
         self,
         restic_path: str,
         backup_target: str,
         logger: logging.Logger,
-        encrypted_mail: EncryptedMail,
     ) -> None:
-        """Initialize the restic client with path, target, logger, and encrypted mail."""
+        """Initialize the restic client with path, target, and logger."""
         self.restic_path = restic_path
         self.backup_target = backup_target
         self.logger = logger
-        self.encrypted_mail = encrypted_mail
         self.temp_dir = Path(tempfile.gettempdir())
         self.temp_dir.mkdir(parents=True, exist_ok=True)
         self.cache_dir = self.temp_dir / "restic_cache"
         self._restic_env: dict[str, str] | None = None
 
-        # Create temporary log file for all commands
+        # Per-command capture (truncated each run) vs cumulative session log for emails
         with tempfile.NamedTemporaryFile(
             suffix=".log",
             prefix="restic_",
             delete=False,
         ) as temp_file:
-            temp_file_path = temp_file.name
-        self.log_file = Path(temp_file_path)
-        self.logger.info(f"Created temporary log file: {self.log_file}")
+            self.log_file = Path(temp_file.name)
+        with tempfile.NamedTemporaryFile(
+            suffix=".log",
+            prefix="restic_session_",
+            delete=False,
+        ) as session_file:
+            self.session_log = Path(session_file.name)
+        self.session_log.write_text(
+            f"Restic session log\nrepository: {self.backup_target}\n",
+            encoding="utf-8",
+        )
+        self.logger.info(
+            f"Created temporary log file: {self.log_file} "
+            f"and session log: {self.session_log}",
+        )
 
     def set_environment(
         self,
@@ -74,40 +103,52 @@ class ResticClient:
             raise ValueError(error_msg)
         return self._restic_env
 
-    def _send_error_email(
+    def _append_to_session_log(
         self,
         command: list[str],
-        error_msg: str,
-        log_contents: str | None = None,
+        command_output: str = "",
+        stdout: str | None = None,
     ) -> None:
-        """Send encrypted email with error details and log file."""
-        try:
-            subject = f"Restic command failed: {' '.join(command[:3])}..."
-            message = f"Command: {' '.join(command)}\n\nError: {error_msg}"
+        """Append one command's output to the cumulative session log.
 
-            # Include log contents in message if available
-            if log_contents:
-                message += f"\n\nLog contents:\n{log_contents}"
-
-            self.encrypted_mail.send_mail_with_retries(
-                subject=subject,
-                message=message,
-                mail_attachment=str(self.log_file) if self.log_file.exists() else None,
-            )
-        except Exception:
-            self.logger.exception("Failed to send error email")
+        ``log_file`` stays per-command (truncated) for parsing; ``session_log``
+        accumulates everything so email attachments cover the full run.
+        """
+        parts = [f"\n=== {' '.join(command)} ===\n", command_output]
+        if not command_output.endswith("\n") and command_output:
+            parts.append("\n")
+        if stdout is not None:
+            parts.append("--- stdout ---\n")
+            parts.append(stdout)
+            if stdout and not stdout.endswith("\n"):
+                parts.append("\n")
+        with self.session_log.open("a", encoding="utf-8") as session_file:
+            session_file.write("".join(parts))
 
     def _run_command(
         self,
         command: list[str],
         text: bool = True,
         timeout: int = 3600,
+        raise_on_error: bool = True,
     ) -> subprocess.CompletedProcess[str]:
-        """Execute a command with proper error handling and logging."""
+        """Execute a command with proper error handling and logging.
+
+        Args:
+            command: The command and arguments to execute
+            text: Whether to decode the output as text
+            timeout: Timeout in seconds for the command
+            raise_on_error: If True, a non-zero exit code raises
+                ResticCommandFailedError. If False, the non-zero exit code is
+                logged as a warning and the completed process (including its
+                output) is returned so the caller can inspect it. Operational
+                failures (timeout, subprocess errors) always raise.
+
+        """
         self.logger.debug(f"Running command: {' '.join(command)}")
 
         try:
-            # Run command and capture output to log file
+            # Capture this command only; session_log keeps the full run history
             with self.log_file.open("w") as f:
                 result = subprocess.run(  # noqa: S603
                     command,
@@ -121,32 +162,110 @@ class ResticClient:
                 )
 
             result.stdout = self.log_file.read_text()
+            self._append_to_session_log(command, result.stdout)
             # Check for non-zero exit code
             if result.returncode != 0:
-                log_contents = (
-                    self.log_file.read_text() if self.log_file.exists() else None
-                )
                 error_msg = f"Command returned non-zero exit code: {result.returncode}"
                 self.logger.error(f"{error_msg} - Command: {' '.join(command)}")
-                self._send_error_email(command, error_msg, log_contents)
-                raise ResticCommandFailedError(error_msg)
+                if raise_on_error:
+                    log_contents = result.stdout or None
+                    # A repository lock is potentially recoverable: let the
+                    # caller unlock stale locks and retry instead of alerting.
+                    if self.is_lock_error(log_contents):
+                        self.logger.warning(
+                            "Restic reported a repository lock error.",
+                        )
+                        raise ResticRepositoryLockedError(error_msg)
+                    raise ResticCommandFailedError(error_msg)
+                self.logger.warning(
+                    "Continuing despite non-zero exit code "
+                    "(raise_on_error=False); caller will inspect the output.",
+                )
             return result  # noqa: TRY300
 
         except subprocess.TimeoutExpired as e:
             log_contents = self.log_file.read_text() if self.log_file.exists() else None
+            self._append_to_session_log(command, log_contents or "")
             error_msg = f"Command timed out after {timeout} seconds"
             self.logger.exception(f"{error_msg}: {' '.join(command)}")
-            self._send_error_email(command, error_msg, log_contents)
             raise ResticCommandFailedError(error_msg) from e
         except subprocess.SubprocessError as e:
             log_contents = self.log_file.read_text() if self.log_file.exists() else None
+            self._append_to_session_log(command, log_contents or "")
             error_msg = f"Command failed: {e}"
             self.logger.exception(f"{error_msg} - Command: {' '.join(command)}")
-            self._send_error_email(command, error_msg, log_contents)
+            raise ResticCommandFailedError(error_msg) from e
+
+    def _run_json_command(
+        self,
+        command: list[str],
+        timeout: int = 3600,
+    ) -> str:
+        """Execute a restic ``--json`` command and return its raw stdout.
+
+        stdout is captured separately (kept free of any stderr/progress noise)
+        so it can be parsed as JSON, while stderr is written to the log file for
+        error reporting. Both are appended to ``session_log``.
+
+        Args:
+            command: The command and arguments to execute (should include --json)
+            timeout: Timeout in seconds for the command
+
+        Returns:
+            The command's stdout as a string
+
+        Raises:
+            ResticCommandFailedError: If the command fails or times out
+
+        """
+        self.logger.debug(f"Running JSON command: {' '.join(command)}")
+
+        try:
+            with self.log_file.open("w") as f:
+                result = subprocess.run(  # noqa: S603
+                    command,
+                    stdout=subprocess.PIPE,
+                    stderr=f,
+                    text=True,
+                    timeout=timeout,
+                    env=self._get_environment(),
+                    check=False,
+                )
+
+            stderr_text = self.log_file.read_text() if self.log_file.exists() else ""
+            stdout_text = result.stdout or ""
+            self._append_to_session_log(
+                command,
+                stderr_text,
+                stdout=stdout_text,
+            )
+
+            if result.returncode != 0:
+                error_msg = f"Command returned non-zero exit code: {result.returncode}"
+                self.logger.error(f"{error_msg} - Command: {' '.join(command)}")
+                raise ResticCommandFailedError(error_msg)
+            return stdout_text  # noqa: TRY300
+
+        except subprocess.TimeoutExpired as e:
+            log_contents = self.log_file.read_text() if self.log_file.exists() else None
+            self._append_to_session_log(command, log_contents or "")
+            error_msg = f"Command timed out after {timeout} seconds"
+            self.logger.exception(f"{error_msg}: {' '.join(command)}")
+            raise ResticCommandFailedError(error_msg) from e
+        except subprocess.SubprocessError as e:
+            log_contents = self.log_file.read_text() if self.log_file.exists() else None
+            self._append_to_session_log(command, log_contents or "")
+            error_msg = f"Command failed: {e}"
+            self.logger.exception(f"{error_msg} - Command: {' '.join(command)}")
             raise ResticCommandFailedError(error_msg) from e
 
     def unlock(self) -> None:
-        """Unlock the restic repository."""
+        """Remove stale locks from the restic repository.
+
+        A non-zero exit code is logged as a warning instead of raising, so that
+        a failed unlock does not mask the original operation the caller is
+        trying to recover (it will retry and surface the real error itself).
+        """
         self.logger.info("Unlocking restic repository")
         cmd = [
             self.restic_path,
@@ -155,7 +274,7 @@ class ResticClient:
             self.backup_target,
             *self._get_cache_dir_args(),
         ]
-        result = self._run_command(cmd)
+        result = self._run_command(cmd, raise_on_error=False)
         if result.returncode != 0:
             self.logger.warning(
                 f"Unlock command returned non-zero exit code: {result.returncode}",
@@ -182,7 +301,6 @@ class ResticClient:
         for exclude in excluded_files:
             cmd.extend(["--exclude", exclude])
 
-        # Use _run_command which handles logging and error emailing
         self._run_command(cmd)
 
         # Extract snapshot ID from log file
@@ -203,57 +321,72 @@ class ResticClient:
         raise SnapshotIDNotFoundError(error_msg)
 
     def get_snapshots(self) -> list[ResticSnapshotId]:
-        """Get list of snapshot IDs."""
+        """Get list of snapshot IDs, ordered from oldest to newest.
+
+        Uses ``restic snapshots --json`` so the result is parsed from structured
+        data instead of fragile column-based text scraping.
+        """
         cmd = [
             self.restic_path,
             "snapshots",
+            "--json",
             "-r",
             self.backup_target,
             *self._get_cache_dir_args(),
         ]
-        result = self._run_command(cmd)
+        stdout = self._run_json_command(cmd)
 
-        if result.returncode != 0:
-            error_msg = "Failed to get snapshots"
-            raise ResticCommandFailedError(error_msg)
+        try:
+            snapshots_data = json.loads(stdout) if stdout.strip() else []
+        except json.JSONDecodeError as e:
+            error_msg = f"Failed to parse restic snapshots JSON output: {e}"
+            self.logger.exception(error_msg)
+            raise ResticCommandFailedError(error_msg) from e
 
         snapshot_ids = []
-        for line in result.stdout.splitlines():
-            parts = line.split()
-            if (
-                len(parts) > 0
-                and len(parts[0]) >= self.MIN_SNAPSHOT_ID_LENGTH
-                and len(parts[0]) <= self.MAX_SNAPSHOT_ID_LENGTH
-            ):
-                snapshot_ids.append(ResticSnapshotId(parts[0]))
+        for entry in snapshots_data:
+            short_id = (
+                entry.get("short_id")
+                or entry.get("id", "")[: ResticSnapshotId.SNAPSHOT_ID_LENGTH]
+            )
+            if short_id:
+                snapshot_ids.append(ResticSnapshotId(short_id))
 
         return snapshot_ids
 
     def diff(self, snapshot1: ResticSnapshotId, snapshot2: ResticSnapshotId) -> str:
-        """Get diff between two snapshots."""
+        """Get diff between two snapshots as newline-delimited JSON.
+
+        Uses ``restic diff --json`` so the caller can parse structured change
+        and statistics messages instead of scraping text markers.
+        """
         cmd = [
             self.restic_path,
             "diff",
             str(snapshot1),
             str(snapshot2),
+            "--json",
             "-r",
             self.backup_target,
             *self._get_cache_dir_args(),
         ]
 
-        result = self._run_command(cmd)
-        if result.returncode != 0:
-            error_msg = "Failed to get diff between snapshots"
-            raise ResticCommandFailedError(error_msg)
-        self.logger.info(f"Diff output: {result.stdout}")
-        return result.stdout
+        stdout = self._run_json_command(cmd)
+        self.logger.info(f"Diff output: {stdout}")
+        return stdout
 
     def find(self, file_pattern: str, snapshot_id: ResticSnapshotId) -> str:
-        """Find files in a snapshot."""
+        """Find files in a snapshot, returning the raw ``restic find --json`` output.
+
+        The output is a JSON array of objects (one per snapshot) with ``hits``,
+        ``snapshot`` and ``matches`` fields, so the caller can determine matches
+        from structured data instead of scraping text.
+        """
         cmd = [
             self.restic_path,
             "find",
             file_pattern,
+            "--json",
             "-s",
             str(snapshot_id),
             "--repo",
@@ -261,12 +394,7 @@ class ResticClient:
             *self._get_cache_dir_args(),
         ]
 
-        result = self._run_command(cmd)
-        if result.returncode != 0:
-            error_msg = f"Failed to find {file_pattern} in snapshot {snapshot_id}"
-            raise ResticCommandFailedError(error_msg)
-
-        return result.stdout or ""
+        return self._run_json_command(cmd)
 
     def forget(self, keep_last: str, keep_daily: str, keep_monthly: str) -> None:
         """Forget old snapshots according to retention policy."""
@@ -322,7 +450,13 @@ class ResticClient:
             raise ResticCommandFailedError(error_msg)
 
     def check(self, read_data_subset: str = "20%") -> str:
-        """Check repository integrity."""
+        """Check repository integrity and return the check output.
+
+        A non-zero exit code (e.g. the repository has errors) does not raise:
+        the output is returned so the caller can distinguish "no errors were
+        found" from a repository that reported problems, and report accordingly.
+        Operational failures (timeout, subprocess errors) still raise.
+        """
         self.logger.info("Running repository check")
         cmd = [
             self.restic_path,
@@ -333,9 +467,5 @@ class ResticClient:
             *self._get_cache_dir_args(),
         ]
 
-        result = self._run_command(cmd)
-        if result.returncode != 0:
-            error_msg = "Repository check failed"
-            raise ResticCommandFailedError(error_msg)
-
+        result = self._run_command(cmd, raise_on_error=False)
         return result.stdout or ""

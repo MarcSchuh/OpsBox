@@ -1,17 +1,22 @@
 """Tests for the restic_client module."""
 
+import json
 import logging
 import subprocess
 import tempfile
 from pathlib import Path
+from typing import IO, cast
 from unittest.mock import Mock, patch
 
 import pytest
 
-from opsbox.backup.exceptions import ResticCommandFailedError, SnapshotIDNotFoundError
+from opsbox.backup.exceptions import (
+    ResticCommandFailedError,
+    ResticRepositoryLockedError,
+    SnapshotIDNotFoundError,
+)
 from opsbox.backup.restic_client import ResticClient
 from opsbox.backup.snapshot_id import ResticSnapshotId
-from opsbox.encrypted_mail import EncryptedMail
 
 
 class TestResticClient:
@@ -23,18 +28,12 @@ class TestResticClient:
         return Mock(spec=logging.Logger)
 
     @pytest.fixture
-    def encrypted_mail(self) -> Mock:
-        """Create a mock EncryptedMail for testing."""
-        return Mock(spec=EncryptedMail)
-
-    @pytest.fixture
-    def restic_client(self, logger, encrypted_mail) -> ResticClient:
+    def restic_client(self, logger) -> ResticClient:
         """Create a ResticClient instance for testing."""
         return ResticClient(
             restic_path="/snap/bin/restic",
             backup_target="sftp:user@host:/repo",
             logger=logger,
-            encrypted_mail=encrypted_mail,
         )
 
     def test_set_environment_with_password(self, restic_client) -> None:
@@ -120,33 +119,58 @@ class TestResticClient:
                         restic_client.backup("/backup/source", ["*.tmp"])
 
     def test_get_snapshots_success(self, restic_client) -> None:
-        """Test that get_snapshots returns list of snapshot IDs."""
+        """Test that get_snapshots parses snapshot IDs from JSON output."""
         restic_client.set_environment("test_password")
 
-        mock_result = Mock()
-        mock_result.returncode = 0
-        mock_result.stdout = (
-            "ID        Time                 Host        Tags        Paths\n"
-            "------------------------------------------------------------------------------\n"
-            "a1b2c3d4 2024-01-01 12:00:00  host   /path/to/backup\n"
-            "e5f6a7b8 2024-01-02 12:00:00  host   /path/to/backup\n"
-            "c9d0e1f2 2024-01-03 12:00:00  host   /path/to/backup\n"
-            "------------------------------------------------------------------------------\n"
-            "3 snapshots"
+        json_output = json.dumps(
+            [
+                {"short_id": "a1b2c3d4", "time": "2024-01-01T12:00:00Z"},
+                {"short_id": "e5f6a7b8", "time": "2024-01-02T12:00:00Z"},
+                {"short_id": "c9d0e1f2", "time": "2024-01-03T12:00:00Z"},
+            ],
         )
 
-        with patch.object(restic_client, "_run_command", return_value=mock_result):
+        with patch.object(
+            restic_client,
+            "_run_json_command",
+            return_value=json_output,
+        ):
             snapshots = restic_client.get_snapshots()
 
             assert len(snapshots) == 3
             assert all(isinstance(s, ResticSnapshotId) for s in snapshots)
-            assert ResticSnapshotId("a1b2c3d4") in snapshots
-            assert ResticSnapshotId("e5f6a7b8") in snapshots
-            assert ResticSnapshotId("c9d0e1f2") in snapshots
-            # Also test string comparison
-            assert "a1b2c3d4" in [str(s) for s in snapshots]
-            assert "e5f6a7b8" in [str(s) for s in snapshots]
-            assert "c9d0e1f2" in [str(s) for s in snapshots]
+            # Order (oldest to newest) is preserved from the JSON output
+            assert [str(s) for s in snapshots] == ["a1b2c3d4", "e5f6a7b8", "c9d0e1f2"]
+
+    def test_get_snapshots_falls_back_to_id(self, restic_client) -> None:
+        """Test that get_snapshots derives the short id from the full id."""
+        restic_client.set_environment("test_password")
+
+        json_output = json.dumps(
+            [{"id": "a1b2c3d4e5f6a7b8c9d0e1f2", "time": "2024-01-01T12:00:00Z"}],
+        )
+
+        with patch.object(
+            restic_client,
+            "_run_json_command",
+            return_value=json_output,
+        ):
+            snapshots = restic_client.get_snapshots()
+
+            assert len(snapshots) == 1
+            assert str(snapshots[0]) == "a1b2c3d4"
+
+    def test_get_snapshots_invalid_json(self, restic_client) -> None:
+        """Test that invalid JSON output raises ResticCommandFailedError."""
+        restic_client.set_environment("test_password")
+
+        with patch.object(
+            restic_client,
+            "_run_json_command",
+            return_value="not valid json",
+        ):
+            with pytest.raises(ResticCommandFailedError, match="Failed to parse"):
+                restic_client.get_snapshots()
 
     def test_get_snapshots_failure(self, restic_client) -> None:
         """Test that ResticCommandFailedError is raised on get_snapshots failure."""
@@ -154,27 +178,31 @@ class TestResticClient:
 
         with patch.object(
             restic_client,
-            "_run_command",
+            "_run_json_command",
             side_effect=ResticCommandFailedError("Command failed"),
         ):
             with pytest.raises(ResticCommandFailedError, match="Command failed"):
                 restic_client.get_snapshots()
 
     def test_diff_success(self, restic_client) -> None:
-        """Test that diff returns output between snapshots."""
+        """Test that diff returns the raw JSON output between snapshots."""
         restic_client.set_environment("test_password")
 
-        mock_result = Mock()
-        mock_result.returncode = 0
-        mock_result.stdout = "diff output between snapshots"
+        json_output = json.dumps(
+            {"message_type": "change", "path": "/a", "modifier": "M"},
+        )
 
-        with patch.object(restic_client, "_run_command", return_value=mock_result):
+        with patch.object(
+            restic_client,
+            "_run_json_command",
+            return_value=json_output,
+        ):
             diff_output = restic_client.diff(
                 ResticSnapshotId("a1b2c3d4"),
                 ResticSnapshotId("e5f6a7b8"),
             )
 
-            assert diff_output == "diff output between snapshots"
+            assert diff_output == json_output
             restic_client.logger.info.assert_called()
 
     def test_diff_failure(self, restic_client) -> None:
@@ -183,7 +211,7 @@ class TestResticClient:
 
         with patch.object(
             restic_client,
-            "_run_command",
+            "_run_json_command",
             side_effect=ResticCommandFailedError("Diff failed"),
         ):
             with pytest.raises(ResticCommandFailedError, match="Diff failed"):
@@ -193,17 +221,27 @@ class TestResticClient:
                 )
 
     def test_find_success(self, restic_client) -> None:
-        """Test that find returns output when searching for files in snapshot."""
+        """Test that find returns the raw JSON output when searching a snapshot."""
         restic_client.set_environment("test_password")
 
-        mock_result = Mock()
-        mock_result.returncode = 0
-        mock_result.stdout = "Found matching entries in snapshot a1b2c3d4"
+        json_output = json.dumps(
+            [
+                {
+                    "hits": 1,
+                    "snapshot": "a1b2c3d4",
+                    "matches": [{"path": "/file.txt", "type": "file"}],
+                },
+            ],
+        )
 
-        with patch.object(restic_client, "_run_command", return_value=mock_result):
+        with patch.object(
+            restic_client,
+            "_run_json_command",
+            return_value=json_output,
+        ):
             find_output = restic_client.find("file.txt", ResticSnapshotId("a1b2c3d4"))
 
-            assert "Found matching entries" in find_output
+            assert find_output == json_output
 
     def test_find_failure(self, restic_client) -> None:
         """Test that ResticCommandFailedError is raised on find failure."""
@@ -211,7 +249,7 @@ class TestResticClient:
 
         with patch.object(
             restic_client,
-            "_run_command",
+            "_run_json_command",
             side_effect=ResticCommandFailedError("Find failed"),
         ):
             with pytest.raises(ResticCommandFailedError, match="Find failed"):
@@ -394,24 +432,115 @@ class TestResticClient:
                     ):
                         restic_client._run_command(["restic", "backup"])
 
-    def test_send_error_email_on_failure(self, restic_client) -> None:
-        """Test that error email is sent when command fails."""
+    def test_command_failure_raises_without_email_dependency(
+        self,
+        restic_client,
+    ) -> None:
+        """Test that command failures raise; client does not own notifications."""
         restic_client.set_environment("test_password")
 
         with tempfile.TemporaryDirectory() as temp_dir:
             log_file = Path(temp_dir) / "restic.log"
+            session_log = Path(temp_dir) / "restic_session.log"
+            session_log.write_text("session header\n")
             log_file.write_text("error log content")
 
             mock_result = Mock()
             mock_result.returncode = 1
 
+            with (
+                patch.object(restic_client, "log_file", log_file),
+                patch.object(restic_client, "session_log", session_log),
+                patch("subprocess.run", return_value=mock_result),
+            ):
+                with pytest.raises(ResticCommandFailedError):
+                    restic_client._run_command(["restic", "backup"])
+
+            assert "=== restic backup ===" in session_log.read_text()
+
+    def test_session_log_accumulates_command_output(self, restic_client) -> None:
+        """Test that each command's output is appended to the session log."""
+        restic_client.set_environment("test_password")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            log_file = Path(temp_dir) / "restic.log"
+            session_log = Path(temp_dir) / "restic_session.log"
+            session_log.write_text("session header\n")
+
+            mock_result = Mock()
+            mock_result.returncode = 0
+
+            def fake_run(*_args: object, **kwargs: object) -> Mock:
+                cast("IO[str]", kwargs["stdout"]).write("backup line\n")
+                return mock_result
+
+            with (
+                patch.object(restic_client, "log_file", log_file),
+                patch.object(restic_client, "session_log", session_log),
+                patch("subprocess.run", side_effect=fake_run),
+            ):
+                restic_client._run_command(["restic", "backup", "/src"])
+                restic_client._run_command(["restic", "forget"])
+
+            session_text = session_log.read_text()
+            assert "session header" in session_text
+            assert "=== restic backup /src ===" in session_text
+            assert "backup line" in session_text
+            assert "=== restic forget ===" in session_text
+            # Per-command log only holds the last command
+            assert log_file.read_text() == "backup line\n"
+
+    def test_run_command_raises_locked_error_without_email(self, restic_client) -> None:
+        """Test that a repository lock error raises the dedicated exception.
+
+        A lock is potentially recoverable, so no failure email should be sent;
+        the caller is expected to unlock and retry instead.
+        """
+        restic_client.set_environment("test_password")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            log_file = Path(temp_dir) / "restic.log"
+
+            mock_result = Mock()
+            mock_result.returncode = 1
+
+            def fake_run(*_args: object, **kwargs: object) -> Mock:
+                # _run_command opens the log file in "w" mode, so the lock text
+                # has to be written by the (mocked) subprocess itself.
+                cast("IO[str]", kwargs["stdout"]).write(
+                    "unable to create lock in backend: repository is already locked",
+                )
+                return mock_result
+
             with patch.object(restic_client, "log_file", log_file):
-                with patch("subprocess.run", return_value=mock_result):
-                    with pytest.raises(ResticCommandFailedError):
+                with patch("subprocess.run", side_effect=fake_run):
+                    with pytest.raises(ResticRepositoryLockedError):
                         restic_client._run_command(["restic", "backup"])
 
-                    # Verify error email was sent
-                    restic_client.encrypted_mail.send_mail_with_retries.assert_called()
+    def test_unlock_uses_raise_on_error_false(self, restic_client) -> None:
+        """Test that unlock invokes the command with raise_on_error disabled."""
+        restic_client.set_environment("test_password")
+
+        mock_result = Mock()
+        mock_result.returncode = 0
+
+        with patch.object(
+            restic_client,
+            "_run_command",
+            return_value=mock_result,
+        ) as mock_run:
+            restic_client.unlock()
+
+            assert mock_run.call_args.kwargs.get("raise_on_error") is False
+
+    def test_is_lock_error_detects_lock_messages(self) -> None:
+        """Test the lock-error signature detection helper."""
+        assert ResticClient.is_lock_error("repository is already locked exclusively")
+        assert ResticClient.is_lock_error("unable to create lock in backend")
+        assert ResticClient.is_lock_error("REPOSITORY IS ALREADY LOCKED")
+        assert not ResticClient.is_lock_error("no errors were found")
+        assert not ResticClient.is_lock_error("")
+        assert not ResticClient.is_lock_error(None)
 
 
 if __name__ == "__main__":
