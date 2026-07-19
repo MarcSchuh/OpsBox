@@ -10,13 +10,69 @@ import pytest
 
 from opsbox.backup.exceptions import (
     ConfigurationError,
+    EmptySourceError,
     NetworkUnreachableError,
     ResticBackupFailedError,
+    ResticRepositoryLockedError,
     SSHKeyNotFoundError,
+    VerificationError,
     WrongOSForResticBackupError,
 )
 from opsbox.backup.restic_backup import BackupScript
 from opsbox.backup.snapshot_id import ResticSnapshotId
+
+
+def make_diff_ndjson(
+    entries: list[tuple[str, str]] | None = None,
+    *,
+    changed_files: int = 0,
+) -> str:
+    """Build 'restic diff --json' ndjson output from (modifier, path) tuples.
+
+    A terminating ``statistics`` message is always appended, mirroring real
+    ``restic diff --json`` output (which the parser now requires).
+    """
+    entries = entries or []
+    lines = [
+        json.dumps({"message_type": "change", "path": path, "modifier": modifier})
+        for modifier, path in entries
+    ]
+    empty_stat = {
+        "files": 0,
+        "dirs": 0,
+        "others": 0,
+        "data_blobs": 0,
+        "tree_blobs": 0,
+        "bytes": 0,
+    }
+    lines.append(
+        json.dumps(
+            {
+                "message_type": "statistics",
+                "source_snapshot": "aaaaaaaa",
+                "target_snapshot": "bbbbbbbb",
+                "changed_files": changed_files,
+                "added": empty_stat,
+                "removed": empty_stat,
+            },
+        ),
+    )
+    return "\n".join(lines)
+
+
+def make_find_json(*, found: bool = True) -> str:
+    """Build 'restic find --json' output; found=False yields no matches."""
+    if not found:
+        return json.dumps([])
+    return json.dumps(
+        [
+            {
+                "hits": 1,
+                "snapshot": "0" * 64,
+                "matches": [{"path": "/important_file.txt", "type": "file"}],
+            },
+        ],
+    )
 
 
 class TestBackupScript:
@@ -30,6 +86,8 @@ class TestBackupScript:
             email_settings = Path(temp_dir) / "email.json"
             backup_source = Path(temp_dir) / "source"
             backup_source.mkdir()
+            # Add an entry so the non-empty source guard passes by default
+            (backup_source / "dummy.txt").write_text("data")
             email_settings.write_text(json.dumps({"sender": "test@example.com"}))
 
             config_data = {
@@ -119,10 +177,8 @@ class TestBackupScript:
             ResticSnapshotId("a1b2c3d4"),
             ResticSnapshotId("c9d0e1f2"),
         ]
-        mock_restic_client.diff.return_value = "Files: 10\nDirs: 5"
-        mock_restic_client.find.return_value = (
-            "Found matching entries in snapshot c9d0e1f2"
-        )
+        mock_restic_client.diff.return_value = make_diff_ndjson()
+        mock_restic_client.find.return_value = make_find_json()
         mock_restic_client.check.return_value = "no errors were found"
         mock_restic_client.log_file = Path("/tmp/restic.log")
 
@@ -205,9 +261,7 @@ class TestBackupScript:
             ResticSnapshotId("a1b2c3d4"),
             ResticSnapshotId("c9d0e1f2"),
         ]
-        mock_restic_client.find.return_value = (
-            "Found matching entries in snapshot c9d0e1f2"
-        )
+        mock_restic_client.find.return_value = make_find_json()
         mock_restic_client.check.return_value = "no errors were found"
         mock_restic_client.log_file = Path("/tmp/restic.log")
 
@@ -281,9 +335,7 @@ class TestBackupScript:
             ResticSnapshotId("a1b2c3d4"),
             ResticSnapshotId("c9d0e1f2"),
         ]
-        mock_restic_client.find.return_value = (
-            "Found matching entries in snapshot c9d0e1f2"
-        )
+        mock_restic_client.find.return_value = make_find_json()
         mock_restic_client.check.return_value = "no errors were found"
         mock_restic_client.log_file = Path("/tmp/restic.log")
 
@@ -465,10 +517,8 @@ class TestBackupScript:
             ResticSnapshotId("a1b2c3d4"),
             ResticSnapshotId("87654321"),
         ]
-        mock_restic_client.diff.return_value = "Files: 10"
-        mock_restic_client.find.return_value = (
-            "Found matching entries in snapshot 87654321"
-        )
+        mock_restic_client.diff.return_value = make_diff_ndjson()
+        mock_restic_client.find.return_value = make_find_json()
         mock_restic_client.check.return_value = "no errors were found"
         mock_restic_client.log_file = Path("/tmp/restic.log")
 
@@ -508,7 +558,7 @@ class TestBackupScript:
         temp_config,
         mock_lock_manager,
     ) -> None:
-        """Test that verification failure is handled (sends email, skips maintenance)."""
+        """Test that verification failure raises, emails once, and skips maintenance."""
         config_file, _, _ = temp_config
 
         mock_restic_client = Mock()
@@ -518,9 +568,10 @@ class TestBackupScript:
             ResticSnapshotId("abc123de"),
             ResticSnapshotId("a1b2c3d6"),
         ]
-        mock_restic_client.diff.return_value = "Files: 10"
-        mock_restic_client.find.return_value = "No matching entries found"
-        mock_restic_client.log_file = Path("/tmp/restic.log")
+        mock_restic_client.diff.return_value = make_diff_ndjson()
+        mock_restic_client.find.return_value = make_find_json(found=False)
+        mock_restic_client.session_log = Path("/tmp/restic_session.log")
+        mock_restic_client.session_log.touch()
 
         mock_encrypted_mail = Mock()
 
@@ -546,11 +597,14 @@ class TestBackupScript:
             mock_pm_class.return_value = mock_password_manager
 
             backup_script = BackupScript(str(config_file))
-            backup_script.run()
+            with pytest.raises(VerificationError):
+                backup_script.run()
 
-            # Verify verification failure email was sent
-            mock_encrypted_mail.send_mail_with_retries.assert_called()
-            # Verify maintenance was NOT performed (verification failed)
+            failure_subjects = [
+                call.kwargs.get("subject", "")
+                for call in mock_encrypted_mail.send_mail_with_retries.call_args_list
+            ]
+            assert sum("verification failed" in s for s in failure_subjects) == 1
             mock_restic_client.forget.assert_not_called()
             mock_restic_client.prune.assert_not_called()
 
@@ -570,10 +624,8 @@ class TestBackupScript:
             ResticSnapshotId("a1b2c3d4"),
             ResticSnapshotId("87654321"),
         ]
-        mock_restic_client.diff.return_value = "Files: 10"
-        mock_restic_client.find.return_value = (
-            "Found matching entries in snapshot 87654321"
-        )
+        mock_restic_client.diff.return_value = make_diff_ndjson()
+        mock_restic_client.find.return_value = make_find_json()
         mock_restic_client.check.return_value = "no errors were found"
         mock_restic_client.log_file = Path("/tmp/restic.log")
 
@@ -606,8 +658,80 @@ class TestBackupScript:
             # Verify all maintenance operations were performed
             mock_restic_client.forget.assert_called_once()
             mock_restic_client.cache_cleanup.assert_called_once()
-            mock_restic_client.prune.assert_called_once()
             mock_restic_client.check.assert_called_once()
+            mock_restic_client.prune.assert_called_once()
+            # Prune must run only after a successful repository check
+            maintenance_names = [
+                call[0]
+                for call in mock_restic_client.method_calls
+                if call[0] in {"forget", "cache_cleanup", "check", "prune"}
+            ]
+            assert maintenance_names == [
+                "forget",
+                "cache_cleanup",
+                "check",
+                "prune",
+            ]
+
+    def test_run_backup_maintenance_skips_prune_when_check_fails(
+        self,
+        temp_config,
+        mock_lock_manager,
+    ) -> None:
+        """Test that prune is skipped when repository check reports problems."""
+        config_file, _, _ = temp_config
+
+        mock_restic_client = Mock()
+        snapshot_id = ResticSnapshotId("87654321")
+        mock_restic_client.backup.return_value = snapshot_id
+        mock_restic_client.get_snapshots.return_value = [
+            ResticSnapshotId("12345678"),
+            ResticSnapshotId("a1b2c3d4"),
+            ResticSnapshotId("87654321"),
+        ]
+        mock_restic_client.diff.return_value = make_diff_ndjson()
+        mock_restic_client.find.return_value = make_find_json()
+        mock_restic_client.check.return_value = "error: pack is damaged"
+        mock_restic_client.log_file = Path("/tmp/restic.log")
+
+        mock_encrypted_mail = Mock()
+
+        with (
+            patch(
+                "opsbox.backup.restic_backup.LockManager",
+                return_value=mock_lock_manager,
+            ),
+            patch(
+                "opsbox.backup.restic_backup.EncryptedMail",
+                return_value=mock_encrypted_mail,
+            ),
+            patch("opsbox.backup.restic_backup.PasswordManager") as mock_pm_class,
+            patch("opsbox.backup.restic_backup.NetworkChecker"),
+            patch("opsbox.backup.restic_backup.SSHManager"),
+            patch(
+                "opsbox.backup.restic_backup.ResticClient",
+                return_value=mock_restic_client,
+            ),
+        ):
+            mock_password_manager = Mock()
+            mock_password_manager.get_restic_password.return_value = "test_password"
+            mock_pm_class.return_value = mock_password_manager
+
+            backup_script = BackupScript(str(config_file))
+            backup_script.run()
+
+            mock_restic_client.forget.assert_called_once()
+            mock_restic_client.cache_cleanup.assert_called_once()
+            mock_restic_client.check.assert_called_once()
+            mock_restic_client.prune.assert_not_called()
+
+            warning_subjects = [
+                call.kwargs.get("subject", "")
+                for call in mock_encrypted_mail.send_mail_with_retries.call_args_list
+            ]
+            assert any(
+                "completed with warnings" in subject for subject in warning_subjects
+            )
 
     def test_generate_diff_summary_success(
         self,
@@ -627,12 +751,8 @@ class TestBackupScript:
             ResticSnapshotId("a1b2c3d4"),
             ResticSnapshotId("87654321"),
         ]
-        mock_restic_client.diff.return_value = (
-            "Files: 10\nDirs: 5\nAdded: 3\nRemoved: 2"
-        )
-        mock_restic_client.find.return_value = (
-            "Found matching entries in snapshot 87654321"
-        )
+        mock_restic_client.diff.return_value = make_diff_ndjson(changed_files=10)
+        mock_restic_client.find.return_value = make_find_json()
         mock_restic_client.check.return_value = "no errors were found"
         mock_restic_client.log_file = Path("/tmp/restic.log")
 
@@ -675,9 +795,7 @@ class TestBackupScript:
         mock_restic_client.get_snapshots.return_value = [
             ResticSnapshotId("a1b2c3d4"),
         ]  # Only one snapshot
-        mock_restic_client.find.return_value = (
-            "Found matching entries in snapshot a1b2c3d4"
-        )
+        mock_restic_client.find.return_value = make_find_json()
         mock_restic_client.check.return_value = "no errors were found"
         mock_restic_client.log_file = Path("/tmp/restic.log")
 
@@ -748,11 +866,11 @@ class TestBackupScript:
             ResticSnapshotId("a1b2c3d6"),
         ]
         # Create diff output with 10 deleted files (exceeds threshold of 5)
-        diff_output = "\n".join([f"-    /path/to/file{i}.txt" for i in range(10)])
-        mock_restic_client.diff.return_value = diff_output
-        mock_restic_client.find.return_value = (
-            "Found matching entries in snapshot a1b2c3d6"
+        diff_output = make_diff_ndjson(
+            [("-", f"/path/to/file{i}.txt") for i in range(10)],
         )
+        mock_restic_client.diff.return_value = diff_output
+        mock_restic_client.find.return_value = make_find_json()
         mock_restic_client.check.return_value = "no errors were found"
         mock_restic_client.log_file = Path("/tmp/restic.log")
 
@@ -838,11 +956,11 @@ class TestBackupScript:
             ResticSnapshotId("87654321"),
         ]
         # Create diff output with 10 modified files (exceeds threshold of 5)
-        diff_output = "\n".join([f"M    /path/to/file{i}.txt" for i in range(10)])
-        mock_restic_client.diff.return_value = diff_output
-        mock_restic_client.find.return_value = (
-            "Found matching entries in snapshot 87654321"
+        diff_output = make_diff_ndjson(
+            [("M", f"/path/to/file{i}.txt") for i in range(10)],
         )
+        mock_restic_client.diff.return_value = diff_output
+        mock_restic_client.find.return_value = make_find_json()
         mock_restic_client.check.return_value = "no errors were found"
         mock_restic_client.log_file = Path("/tmp/restic.log")
 
@@ -929,13 +1047,14 @@ class TestBackupScript:
             ResticSnapshotId("87654321"),
         ]
         # Create diff output with files in monitored folder
-        diff_output = (
-            "-    /important/folder/file1.txt\nM    /important/folder/file2.txt"
+        diff_output = make_diff_ndjson(
+            [
+                ("-", "/important/folder/file1.txt"),
+                ("M", "/important/folder/file2.txt"),
+            ],
         )
         mock_restic_client.diff.return_value = diff_output
-        mock_restic_client.find.return_value = (
-            "Found matching entries in snapshot 87654321"
-        )
+        mock_restic_client.find.return_value = make_find_json()
         mock_restic_client.check.return_value = "no errors were found"
         mock_restic_client.log_file = Path("/tmp/restic.log")
 
@@ -974,6 +1093,288 @@ class TestBackupScript:
             ]
             assert any("monitored folder" in call.lower() for call in calls)
 
+    def test_monitored_folder_alerts_cover_all_change_types(
+        self,
+        temp_config,
+        mock_lock_manager,
+    ) -> None:
+        """Test that added, altered and deleted files in a monitored folder all alert."""
+        config_file, email_settings, backup_source = temp_config
+        config_data = {
+            "backup_source": str(backup_source),
+            "excluded_files": ["*.tmp"],
+            "backup_target": "sftp:user@host:/repo",
+            "password_lookup_1": "service",
+            "password_lookup_2": "username",
+            "email_settings_path": str(email_settings),
+            "file_to_check": "important_file.txt",
+            "monitored_folders": ["/important/folder"],
+        }
+
+        excluded_file = config_data["excluded_files"][0]
+        config_file.write_text(
+            f"backup_source: {config_data['backup_source']}\n"
+            f"excluded_files:\n  - '{excluded_file}'\n"
+            f"backup_target: {config_data['backup_target']}\n"
+            f"password_lookup_1: {config_data['password_lookup_1']}\n"
+            f"password_lookup_2: {config_data['password_lookup_2']}\n"
+            f"email_settings_path: {config_data['email_settings_path']}\n"
+            f"file_to_check: {config_data['file_to_check']}\n"
+            f"monitored_folders:\n  - {config_data['monitored_folders'][0]}\n",
+        )
+
+        mock_restic_client = Mock()
+        snapshot_id = ResticSnapshotId("87654321")
+        mock_restic_client.backup.return_value = snapshot_id
+        mock_restic_client.get_snapshots.return_value = [
+            ResticSnapshotId("12345678"),
+            ResticSnapshotId("a1b2c3d4"),
+            ResticSnapshotId("87654321"),
+        ]
+        # One added (+), one modified (M) and one deleted (-) file in the folder
+        mock_restic_client.diff.return_value = make_diff_ndjson(
+            [
+                ("+", "/important/folder/new.txt"),
+                ("M", "/important/folder/changed.txt"),
+                ("-", "/important/folder/gone.txt"),
+            ],
+        )
+        mock_restic_client.find.return_value = make_find_json()
+        mock_restic_client.check.return_value = "no errors were found"
+        mock_restic_client.log_file = Path("/tmp/restic.log")
+
+        mock_encrypted_mail = Mock()
+
+        with (
+            patch(
+                "opsbox.backup.restic_backup.LockManager",
+                return_value=mock_lock_manager,
+            ),
+            patch(
+                "opsbox.backup.restic_backup.EncryptedMail",
+                return_value=mock_encrypted_mail,
+            ),
+            patch("opsbox.backup.restic_backup.PasswordManager") as mock_pm_class,
+            patch("opsbox.backup.restic_backup.NetworkChecker"),
+            patch("opsbox.backup.restic_backup.SSHManager"),
+            patch(
+                "opsbox.backup.restic_backup.ResticClient",
+                return_value=mock_restic_client,
+            ),
+        ):
+            mock_password_manager = Mock()
+            mock_password_manager.get_restic_password.return_value = "test_password"
+            mock_pm_class.return_value = mock_password_manager
+
+            backup_script = BackupScript(str(config_file))
+            backup_script.run()
+
+            calls = [
+                str(call)
+                for call in mock_encrypted_mail.send_mail_with_retries.call_args_list
+            ]
+            monitored_calls = [
+                call for call in calls if "monitored folder" in call.lower()
+            ]
+            # Every change type must produce a monitored-folder alert
+            assert any("added in monitored folder" in call for call in monitored_calls)
+            assert any(
+                "altered in monitored folder" in call for call in monitored_calls
+            )
+            assert any(
+                "deleted in monitored folder" in call for call in monitored_calls
+            )
+
+    def test_run_aborts_on_empty_source(
+        self,
+        temp_config,
+        mock_lock_manager,
+    ) -> None:
+        """Test that the backup is aborted when the source directory is empty."""
+        config_file, _, backup_source = temp_config
+
+        # Remove the fixture's entry so the source becomes empty
+        for entry in backup_source.iterdir():
+            entry.unlink()
+
+        mock_restic_client = Mock()
+        mock_restic_client.log_file = Path("/tmp/restic.log")
+        mock_encrypted_mail = Mock()
+
+        with (
+            patch(
+                "opsbox.backup.restic_backup.LockManager",
+                return_value=mock_lock_manager,
+            ),
+            patch(
+                "opsbox.backup.restic_backup.EncryptedMail",
+                return_value=mock_encrypted_mail,
+            ),
+            patch("opsbox.backup.restic_backup.PasswordManager") as mock_pm_class,
+            patch("opsbox.backup.restic_backup.NetworkChecker"),
+            patch("opsbox.backup.restic_backup.SSHManager"),
+            patch(
+                "opsbox.backup.restic_backup.ResticClient",
+                return_value=mock_restic_client,
+            ),
+        ):
+            mock_password_manager = Mock()
+            mock_password_manager.get_restic_password.return_value = "test_password"
+            mock_pm_class.return_value = mock_password_manager
+
+            backup_script = BackupScript(str(config_file))
+
+            with pytest.raises(EmptySourceError):
+                backup_script.run()
+
+            # Backup must not be attempted for an empty source
+            mock_restic_client.backup.assert_not_called()
+
+    def test_run_addition_threshold_warning(
+        self,
+        temp_config,
+        mock_lock_manager,
+    ) -> None:
+        """Test that a warning email is sent when the addition threshold is exceeded."""
+        config_file, email_settings, backup_source = temp_config
+        config_data: dict[str, str | int | list[str]] = {
+            "backup_source": str(backup_source),
+            "excluded_files": ["*.tmp"],
+            "backup_target": "sftp:user@host:/repo",
+            "password_lookup_1": "service",
+            "password_lookup_2": "username",
+            "email_settings_path": str(email_settings),
+            "file_to_check": "important_file.txt",
+            "addition_threshold": 5,
+        }
+
+        excluded_file = config_data["excluded_files"][0]  # type: ignore[index]
+        config_file.write_text(
+            f"backup_source: {config_data['backup_source']}\n"
+            f"excluded_files:\n  - '{excluded_file}'\n"
+            f"backup_target: {config_data['backup_target']}\n"
+            f"password_lookup_1: {config_data['password_lookup_1']}\n"
+            f"password_lookup_2: {config_data['password_lookup_2']}\n"
+            f"email_settings_path: {config_data['email_settings_path']}\n"
+            f"file_to_check: {config_data['file_to_check']}\n"
+            f"addition_threshold: {config_data['addition_threshold']}\n",
+        )
+
+        mock_restic_client = Mock()
+        snapshot_id = ResticSnapshotId("87654321")
+        mock_restic_client.backup.return_value = snapshot_id
+        mock_restic_client.get_snapshots.return_value = [
+            ResticSnapshotId("12345678"),
+            ResticSnapshotId("a1b2c3d4"),
+            ResticSnapshotId("87654321"),
+        ]
+        # 10 added files exceeds the addition threshold of 5
+        diff_output = make_diff_ndjson(
+            [("+", f"/path/to/file{i}.txt") for i in range(10)],
+        )
+        mock_restic_client.diff.return_value = diff_output
+        mock_restic_client.find.return_value = make_find_json()
+        mock_restic_client.check.return_value = "no errors were found"
+        mock_restic_client.log_file = Path("/tmp/restic.log")
+
+        mock_encrypted_mail = Mock()
+
+        with (
+            patch(
+                "opsbox.backup.restic_backup.LockManager",
+                return_value=mock_lock_manager,
+            ),
+            patch(
+                "opsbox.backup.restic_backup.EncryptedMail",
+                return_value=mock_encrypted_mail,
+            ),
+            patch("opsbox.backup.restic_backup.PasswordManager") as mock_pm_class,
+            patch("opsbox.backup.restic_backup.NetworkChecker"),
+            patch("opsbox.backup.restic_backup.SSHManager"),
+            patch(
+                "opsbox.backup.restic_backup.ResticClient",
+                return_value=mock_restic_client,
+            ),
+        ):
+            mock_password_manager = Mock()
+            mock_password_manager.get_restic_password.return_value = "test_password"
+            mock_pm_class.return_value = mock_password_manager
+
+            backup_script = BackupScript(str(config_file))
+            backup_script.run()
+
+            calls = [
+                str(call)
+                for call in mock_encrypted_mail.send_mail_with_retries.call_args_list
+            ]
+            assert any("files added (threshold" in call for call in calls)
+
+    def test_check_read_data_subset_passed_to_check(
+        self,
+        temp_config,
+        mock_lock_manager,
+    ) -> None:
+        """Test that the configured check_read_data_subset is passed to restic check."""
+        config_file, email_settings, backup_source = temp_config
+        config_data: dict[str, str | list[str]] = {
+            "backup_source": str(backup_source),
+            "excluded_files": ["*.tmp"],
+            "backup_target": "sftp:user@host:/repo",
+            "password_lookup_1": "service",
+            "password_lookup_2": "username",
+            "email_settings_path": str(email_settings),
+            "file_to_check": "important_file.txt",
+            "check_read_data_subset": "100%",
+        }
+
+        excluded_file = config_data["excluded_files"][0]
+        config_file.write_text(
+            f"backup_source: {config_data['backup_source']}\n"
+            f"excluded_files:\n  - '{excluded_file}'\n"
+            f"backup_target: {config_data['backup_target']}\n"
+            f"password_lookup_1: {config_data['password_lookup_1']}\n"
+            f"password_lookup_2: {config_data['password_lookup_2']}\n"
+            f"email_settings_path: {config_data['email_settings_path']}\n"
+            f"file_to_check: {config_data['file_to_check']}\n"
+            f"check_read_data_subset: '{config_data['check_read_data_subset']}'\n",
+        )
+
+        mock_restic_client = Mock()
+        snapshot_id = ResticSnapshotId("87654321")
+        mock_restic_client.backup.return_value = snapshot_id
+        mock_restic_client.get_snapshots.return_value = [
+            ResticSnapshotId("12345678"),
+            ResticSnapshotId("a1b2c3d4"),
+            ResticSnapshotId("87654321"),
+        ]
+        mock_restic_client.diff.return_value = make_diff_ndjson()
+        mock_restic_client.find.return_value = make_find_json()
+        mock_restic_client.check.return_value = "no errors were found"
+        mock_restic_client.log_file = Path("/tmp/restic.log")
+
+        with (
+            patch(
+                "opsbox.backup.restic_backup.LockManager",
+                return_value=mock_lock_manager,
+            ),
+            patch("opsbox.backup.restic_backup.EncryptedMail"),
+            patch("opsbox.backup.restic_backup.PasswordManager") as mock_pm_class,
+            patch("opsbox.backup.restic_backup.NetworkChecker"),
+            patch("opsbox.backup.restic_backup.SSHManager"),
+            patch(
+                "opsbox.backup.restic_backup.ResticClient",
+                return_value=mock_restic_client,
+            ),
+        ):
+            mock_password_manager = Mock()
+            mock_password_manager.get_restic_password.return_value = "test_password"
+            mock_pm_class.return_value = mock_password_manager
+
+            backup_script = BackupScript(str(config_file))
+            backup_script.run()
+
+            mock_restic_client.check.assert_called_once_with("100%")
+
     def test_run_backup_failure_sends_email(
         self,
         temp_config,
@@ -984,8 +1385,8 @@ class TestBackupScript:
 
         mock_restic_client = Mock()
         mock_restic_client.backup.side_effect = ResticBackupFailedError("Backup failed")
-        mock_restic_client.log_file = Path("/tmp/restic.log")
-        mock_restic_client.log_file.touch()
+        mock_restic_client.session_log = Path("/tmp/restic_session.log")
+        mock_restic_client.session_log.touch()
 
         mock_encrypted_mail = Mock()
 
@@ -1015,7 +1416,7 @@ class TestBackupScript:
             with pytest.raises(ResticBackupFailedError):
                 backup_script.run()
 
-            # Verify error email was sent with log attachment
+            # Verify error email was sent with full session log attachment
             mock_encrypted_mail.send_mail_with_retries.assert_called()
             # Check all calls to find the backup failure email
             calls = mock_encrypted_mail.send_mail_with_retries.call_args_list
@@ -1038,7 +1439,147 @@ class TestBackupScript:
                 if hasattr(backup_failure_call, "kwargs")
                 else backup_failure_call[1]
             )
-            assert kwargs.get("mail_attachment") == str(mock_restic_client.log_file)
+            assert kwargs.get("mail_attachment") == str(mock_restic_client.session_log)
+
+    def test_backup_retries_once_after_repository_lock(
+        self,
+        temp_config,
+        mock_lock_manager,
+    ) -> None:
+        """Test that a stale repository lock triggers unlock and a single retry."""
+        config_file, _, _ = temp_config
+
+        mock_restic_client = Mock()
+        snapshot_id = ResticSnapshotId("c9d0e1f2")
+        # First backup attempt hits a repository lock, the retry succeeds.
+        mock_restic_client.backup.side_effect = [
+            ResticRepositoryLockedError("repository is already locked"),
+            snapshot_id,
+        ]
+        mock_restic_client.get_snapshots.return_value = [
+            ResticSnapshotId("e5f6a7b8"),
+            ResticSnapshotId("a1b2c3d4"),
+            ResticSnapshotId("c9d0e1f2"),
+        ]
+        mock_restic_client.diff.return_value = make_diff_ndjson()
+        mock_restic_client.find.return_value = make_find_json()
+        mock_restic_client.check.return_value = "no errors were found"
+        mock_restic_client.log_file = Path("/tmp/restic.log")
+
+        with (
+            patch(
+                "opsbox.backup.restic_backup.LockManager",
+                return_value=mock_lock_manager,
+            ),
+            patch("opsbox.backup.restic_backup.EncryptedMail"),
+            patch("opsbox.backup.restic_backup.PasswordManager") as mock_pm_class,
+            patch("opsbox.backup.restic_backup.NetworkChecker"),
+            patch("opsbox.backup.restic_backup.SSHManager"),
+            patch(
+                "opsbox.backup.restic_backup.ResticClient",
+                return_value=mock_restic_client,
+            ),
+        ):
+            mock_password_manager = Mock()
+            mock_password_manager.get_restic_password.return_value = "test_password"
+            mock_pm_class.return_value = mock_password_manager
+
+            backup_script = BackupScript(str(config_file))
+            backup_script.run()
+
+            assert mock_restic_client.backup.call_count == 2
+            mock_restic_client.unlock.assert_called_once()
+
+    def test_backup_fails_when_still_locked_after_unlock(
+        self,
+        temp_config,
+        mock_lock_manager,
+    ) -> None:
+        """Test that a persistent repository lock fails after a single retry."""
+        config_file, _, _ = temp_config
+
+        mock_restic_client = Mock()
+        mock_restic_client.backup.side_effect = ResticRepositoryLockedError(
+            "repository is already locked",
+        )
+        mock_restic_client.log_file = Path("/tmp/restic.log")
+        mock_restic_client.log_file.touch()
+
+        with (
+            patch(
+                "opsbox.backup.restic_backup.LockManager",
+                return_value=mock_lock_manager,
+            ),
+            patch("opsbox.backup.restic_backup.EncryptedMail"),
+            patch("opsbox.backup.restic_backup.PasswordManager") as mock_pm_class,
+            patch("opsbox.backup.restic_backup.NetworkChecker"),
+            patch("opsbox.backup.restic_backup.SSHManager"),
+            patch(
+                "opsbox.backup.restic_backup.ResticClient",
+                return_value=mock_restic_client,
+            ),
+        ):
+            mock_password_manager = Mock()
+            mock_password_manager.get_restic_password.return_value = "test_password"
+            mock_pm_class.return_value = mock_password_manager
+
+            backup_script = BackupScript(str(config_file))
+
+            with pytest.raises(ResticRepositoryLockedError):
+                backup_script.run()
+
+            # Original attempt plus exactly one retry.
+            assert mock_restic_client.backup.call_count == 2
+            mock_restic_client.unlock.assert_called_once()
+
+    def test_check_retries_once_after_repository_lock(
+        self,
+        temp_config,
+        mock_lock_manager,
+    ) -> None:
+        """Test that a locked repository during check unlocks and retries once."""
+        config_file, _, _ = temp_config
+
+        mock_restic_client = Mock()
+        snapshot_id = ResticSnapshotId("c9d0e1f2")
+        mock_restic_client.backup.return_value = snapshot_id
+        mock_restic_client.get_snapshots.return_value = [
+            ResticSnapshotId("e5f6a7b8"),
+            ResticSnapshotId("a1b2c3d4"),
+            ResticSnapshotId("c9d0e1f2"),
+        ]
+        mock_restic_client.diff.return_value = make_diff_ndjson()
+        mock_restic_client.find.return_value = make_find_json()
+        # check() does not raise; the lock surfaces as text in the output.
+        mock_restic_client.check.side_effect = [
+            "unable to create lock in backend: repository is already locked",
+            "no errors were found",
+        ]
+        mock_restic_client.log_file = Path("/tmp/restic.log")
+
+        with (
+            patch(
+                "opsbox.backup.restic_backup.LockManager",
+                return_value=mock_lock_manager,
+            ),
+            patch("opsbox.backup.restic_backup.EncryptedMail"),
+            patch("opsbox.backup.restic_backup.PasswordManager") as mock_pm_class,
+            patch("opsbox.backup.restic_backup.NetworkChecker"),
+            patch("opsbox.backup.restic_backup.SSHManager"),
+            patch(
+                "opsbox.backup.restic_backup.ResticClient",
+                return_value=mock_restic_client,
+            ),
+        ):
+            mock_password_manager = Mock()
+            mock_password_manager.get_restic_password.return_value = "test_password"
+            mock_pm_class.return_value = mock_password_manager
+
+            backup_script = BackupScript(str(config_file))
+            backup_script.run()
+
+            assert mock_restic_client.check.call_count == 2
+            mock_restic_client.unlock.assert_called_once()
 
 
 if __name__ == "__main__":

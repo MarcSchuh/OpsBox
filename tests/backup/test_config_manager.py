@@ -407,7 +407,6 @@ class TestBackupConfig:
             assert config.keep_daily == "21"
             assert config.keep_monthly == "5"
             assert config.ssh_key_max_retries == 12
-            assert config.detailed_report is True
             assert config.default_user == getpass.getuser()
 
     def test_get_default_config(self) -> None:

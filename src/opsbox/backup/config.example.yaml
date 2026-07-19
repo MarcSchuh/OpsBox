@@ -13,15 +13,17 @@ keep_last: "10"
 keep_daily: "21"
 keep_monthly: "5"
 ssh_key_max_retries: 12
-detailed_report: true
 network_host: null
 ssh_key: null
 ssh_user: null
 restic_password: null
 user_id: null
 deletion_threshold: null # Send warning email if more than this many files are deleted (null to disable)
-alteration_threshold: null # Send warning email if more than this many files are altered (null to disable)
-monitored_folders: [] # List of folders to monitor for changes (empty list to disable)
+alteration_threshold: null # Send warning email if more than this many files are altered/changed (null to disable)
+addition_threshold: null # Send warning email if more than this many files are newly added (null to disable)
+min_source_entries: 1 # Abort the backup if the source directory has fewer than this many entries (protects against unmounted/empty sources)
+check_read_data_subset: "20%" # Portion of repository data that "restic check" re-reads and verifies during maintenance (e.g. "20%", "100%", "1G")
+monitored_folders: [] # Folders to watch: ANY change (added/altered/deleted file) inside triggers an alert email (empty list to disable)
   # Example:
   # - /path/to/important/folder
   # - /another/monitored/path
