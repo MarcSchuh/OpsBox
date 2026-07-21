@@ -20,6 +20,12 @@ LOCK_ERROR_SIGNATURES = (
     "unable to create lock",
 )
 
+# Sentinel for the per-call ``timeout`` argument, meaning "fall back to the
+# client's configured ``command_timeout``". A distinct object is used so an
+# explicit ``timeout=None`` (run without any timeout) can be told apart from
+# "no timeout argument was passed".
+_USE_CONFIG_TIMEOUT = object()
+
 
 def is_lock_error(text: str | None) -> bool:
     """Return True if ``text`` looks like a restic repository-lock error."""
@@ -44,11 +50,24 @@ class ResticClient:
         restic_path: str,
         backup_target: str,
         logger: logging.Logger,
+        command_timeout: int | None = None,
     ) -> None:
-        """Initialize the restic client with path, target, and logger."""
+        """Initialize the restic client with path, target, and logger.
+
+        Args:
+            restic_path: Path to the restic executable.
+            backup_target: The restic repository / backup target.
+            logger: Logger used for command and error reporting.
+            command_timeout: Timeout in seconds applied to every restic command.
+                ``None`` (the default) means no timeout, i.e. commands may run
+                indefinitely. Large backups can easily exceed any fixed limit,
+                so a timeout is only enforced when explicitly configured.
+
+        """
         self.restic_path = restic_path
         self.backup_target = backup_target
         self.logger = logger
+        self.command_timeout = command_timeout
         self.temp_dir = Path(tempfile.gettempdir())
         self.temp_dir.mkdir(parents=True, exist_ok=True)
         self.cache_dir = self.temp_dir / "restic_cache"
@@ -125,11 +144,22 @@ class ResticClient:
         with self.session_log.open("a", encoding="utf-8") as session_file:
             session_file.write("".join(parts))
 
+    def _resolve_timeout(self, timeout: int | None | object) -> int | None:
+        """Resolve a per-call timeout against the configured default.
+
+        When ``timeout`` is the ``_USE_CONFIG_TIMEOUT`` sentinel, the client's
+        ``command_timeout`` is used (``None`` = no timeout). An explicit value
+        (including ``None``) always overrides the configured default.
+        """
+        if timeout is _USE_CONFIG_TIMEOUT:
+            return self.command_timeout
+        return timeout  # type: ignore[return-value]
+
     def _run_command(
         self,
         command: list[str],
         text: bool = True,
-        timeout: int = 3600,
+        timeout: int | None | object = _USE_CONFIG_TIMEOUT,
         raise_on_error: bool = True,
     ) -> subprocess.CompletedProcess[str]:
         """Execute a command with proper error handling and logging.
@@ -137,7 +167,8 @@ class ResticClient:
         Args:
             command: The command and arguments to execute
             text: Whether to decode the output as text
-            timeout: Timeout in seconds for the command
+            timeout: Timeout in seconds for the command. Defaults to the
+                client's configured ``command_timeout`` (``None`` = no timeout).
             raise_on_error: If True, a non-zero exit code raises
                 ResticCommandFailedError. If False, the non-zero exit code is
                 logged as a warning and the completed process (including its
@@ -146,6 +177,7 @@ class ResticClient:
 
         """
         self.logger.debug(f"Running command: {' '.join(command)}")
+        effective_timeout = self._resolve_timeout(timeout)
 
         try:
             # Capture this command only; session_log keeps the full run history
@@ -154,7 +186,7 @@ class ResticClient:
                     command,
                     capture_output=False,
                     text=text,
-                    timeout=timeout,
+                    timeout=effective_timeout,
                     env=self._get_environment(),
                     check=False,
                     stdout=f,
@@ -186,7 +218,7 @@ class ResticClient:
         except subprocess.TimeoutExpired as e:
             log_contents = self.log_file.read_text() if self.log_file.exists() else None
             self._append_to_session_log(command, log_contents or "")
-            error_msg = f"Command timed out after {timeout} seconds"
+            error_msg = f"Command timed out after {effective_timeout} seconds"
             self.logger.exception(f"{error_msg}: {' '.join(command)}")
             raise ResticCommandFailedError(error_msg) from e
         except subprocess.SubprocessError as e:
@@ -199,7 +231,7 @@ class ResticClient:
     def _run_json_command(
         self,
         command: list[str],
-        timeout: int = 3600,
+        timeout: int | None | object = _USE_CONFIG_TIMEOUT,
     ) -> str:
         """Execute a restic ``--json`` command and return its raw stdout.
 
@@ -209,7 +241,8 @@ class ResticClient:
 
         Args:
             command: The command and arguments to execute (should include --json)
-            timeout: Timeout in seconds for the command
+            timeout: Timeout in seconds for the command. Defaults to the
+                client's configured ``command_timeout`` (``None`` = no timeout).
 
         Returns:
             The command's stdout as a string
@@ -219,6 +252,7 @@ class ResticClient:
 
         """
         self.logger.debug(f"Running JSON command: {' '.join(command)}")
+        effective_timeout = self._resolve_timeout(timeout)
 
         try:
             with self.log_file.open("w") as f:
@@ -227,7 +261,7 @@ class ResticClient:
                     stdout=subprocess.PIPE,
                     stderr=f,
                     text=True,
-                    timeout=timeout,
+                    timeout=effective_timeout,
                     env=self._get_environment(),
                     check=False,
                 )
@@ -249,7 +283,7 @@ class ResticClient:
         except subprocess.TimeoutExpired as e:
             log_contents = self.log_file.read_text() if self.log_file.exists() else None
             self._append_to_session_log(command, log_contents or "")
-            error_msg = f"Command timed out after {timeout} seconds"
+            error_msg = f"Command timed out after {effective_timeout} seconds"
             self.logger.exception(f"{error_msg}: {' '.join(command)}")
             raise ResticCommandFailedError(error_msg) from e
         except subprocess.SubprocessError as e:

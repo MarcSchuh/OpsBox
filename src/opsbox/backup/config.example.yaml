@@ -1,30 +1,105 @@
+# =============================================================================
+# OpsBox restic backup - example configuration
+# =============================================================================
+# Copy this file, adjust the values and pass it via:
+#   restic_backup --config /path/to/your-config.yaml
+#
+# Fields marked "required" must be present. All other fields are optional and
+# fall back to the defaults shown below (see config_manager.BackupConfig).
+
+# --- What to back up ---------------------------------------------------------
+
+# Directory that gets backed up (required).
 backup_source: /path/to/backup/source
+
+# Glob patterns that are excluded from the backup (optional, defaults to []).
 excluded_files:
   - "*.tmp"
   - "*.log"
   - "*.cache"
+
+# Restic repository / backup destination (required).
 backup_target: sftp:user@host:/path/to/repo
+
+# --- Repository password -----------------------------------------------------
+# Provide EITHER both password_lookup_1 + password_lookup_2 (looked up via the
+# password manager) OR restic_password directly. Do not set both mechanisms.
+
+# Two-part lookup key resolved by the password manager.
 password_lookup_1: restic
 password_lookup_2: password
+
+# Direct repository password. If set, password_lookup_1/2 must be omitted/null.
+restic_password: null
+
+# --- Notifications & verification --------------------------------------------
+
+# Path to the encrypted-mail settings JSON used for notifications (required).
 email_settings_path: /path/to/email_settings.json
+
+# A file that must exist in the created snapshot; used to verify the backup
+# actually contains data (required).
 file_to_check: important_file.txt
+
+# Subject prefix used in notification emails (optional).
+backup_title: "Default backup title"
+
+# --- Users -------------------------------------------------------------------
+
+# User the backup runs as (optional, defaults to the current user).
 default_user: backup_user
+
+# Numeric user id (optional, defaults to the current process uid).
+user_id: null
+
+# --- SSH / network (only needed for remote sftp targets) ---------------------
+# network_host, ssh_key and ssh_user must be configured together. Leave all
+# null for local repositories.
+
+# Host to ping before starting; the backup is skipped if it is unreachable.
+network_host: null
+
+# SSH private key added to the agent for the connection.
+ssh_key: null
+
+# SSH user that owns the key above.
+ssh_user: null
+
+# How often loading the SSH key into the agent is retried (optional).
+ssh_key_max_retries: 12
+
+# --- Retention policy (passed to "restic forget") ----------------------------
 keep_last: "10"
 keep_daily: "21"
 keep_monthly: "5"
-ssh_key_max_retries: 12
-network_host: null
-ssh_key: null
-ssh_user: null
-restic_password: null
-user_id: null
-deletion_threshold: null # Send warning email if more than this many files are deleted (null to disable)
-alteration_threshold: null # Send warning email if more than this many files are altered/changed (null to disable)
-addition_threshold: null # Send warning email if more than this many files are newly added (null to disable)
-min_source_entries: 1 # Abort the backup if the source directory has fewer than this many entries (protects against unmounted/empty sources)
-check_read_data_subset: "20%" # Portion of repository data that "restic check" re-reads and verifies during maintenance (e.g. "20%", "100%", "1G")
-monitored_folders: [] # Folders to watch: ANY change (added/altered/deleted file) inside triggers an alert email (empty list to disable)
+
+# --- Safety & maintenance ----------------------------------------------------
+
+# Abort the backup if the source directory has fewer than this many entries
+# (protects against backing up an unmounted/empty source).
+min_source_entries: 1
+
+# Portion of repository data that "restic check" re-reads and verifies during
+# maintenance (e.g. "20%", "100%", "1G").
+check_read_data_subset: "20%"
+
+# Per-command timeout in seconds applied to every restic invocation
+# (backup, check, prune, ...). Leave as null for NO timeout, so large backups
+# are never aborted prematurely. Set a positive integer only if you explicitly
+# want to bound how long a single restic command may run.
+command_timeout: null
+
+# --- Change alerts -----------------------------------------------------------
+
+# Send a warning email if a single run adds/alters/deletes more than this many
+# files. Use null to disable the respective check.
+deletion_threshold: null # too many files deleted
+alteration_threshold: null # too many files altered/changed
+addition_threshold: null # too many newly added files
+
+# Folders to watch: ANY change (added/altered/deleted file) inside triggers an
+# alert email. Empty list disables monitoring.
+monitored_folders: []
   # Example:
   # - /path/to/important/folder
   # - /another/monitored/path
-backup_title: "Default backup title"
