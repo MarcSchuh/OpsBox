@@ -63,6 +63,16 @@ class BackupScript:
     MIN_SNAPSHOTS_FOR_DIFF = 2
     MAX_FILES_IN_EMAIL = 200
 
+    # Session logs are attached to notification emails. EncryptedMail drops any
+    # attachment at/above its 5 MB limit, so an oversized log (e.g. a restic
+    # diff of thousands of files written verbatim) would leave the mail without
+    # any log at all. Such logs are truncated to this budget (kept below the
+    # 5 MB limit for encoding/encryption overhead), preserving the head and tail
+    # plus a header explaining how to obtain the full log on the host.
+    MAX_LOG_ATTACHMENT_BYTES = 4 * 1024 * 1024
+    LOG_ATTACHMENT_HEAD_BYTES = 1 * 1024 * 1024
+    LOG_ATTACHMENT_TAIL_BYTES = 2 * 1024 * 1024
+
     def __init__(
         self,
         config_path: str,
@@ -168,16 +178,76 @@ class BackupScript:
         return f"Backup {title} failed"
 
     def _send_failure_email(self, error: BaseException) -> None:
-        """Send a single failure notification with the full session log."""
-        attachment = None
+        """Send a single failure notification with the (bounded) session log."""
         session_log = getattr(self.restic_client, "session_log", None)
-        if isinstance(session_log, (str, Path)) and Path(session_log).exists():
-            attachment = str(session_log)
+        attachment = self._prepare_log_attachment(session_log)
         self.encrypted_mail.send_mail_with_retries(
             subject=self._failure_mail_subject(error),
             message=f"Backup failed: {error}",
             mail_attachment=attachment,
         )
+
+    def _prepare_log_attachment(self, log_path: str | Path | None) -> str | None:
+        """Return a session-log attachment path that fits the mail size limit.
+
+        The full restic session log can grow large: a diff of thousands of files
+        is written verbatim. ``EncryptedMail`` silently drops attachments that
+        exceed its size limit, which would leave failure/success mails without
+        any log at all. To avoid that, an oversized log is truncated to a
+        head+tail excerpt with a header explaining that it was cut and how to
+        obtain the full log (and rebuild the diff) on the host. Logs within the
+        budget are returned unchanged.
+        """
+        if not isinstance(log_path, (str, Path)):
+            return None
+        path = Path(log_path)
+        if not path.is_file():
+            return None
+
+        original_size = path.stat().st_size
+        if original_size <= self.MAX_LOG_ATTACHMENT_BYTES:
+            return str(path)
+
+        head_bytes = self.LOG_ATTACHMENT_HEAD_BYTES
+        tail_bytes = self.LOG_ATTACHMENT_TAIL_BYTES
+        omitted = original_size - head_bytes - tail_bytes
+
+        with path.open("rb") as f:
+            head = f.read(head_bytes)
+            f.seek(-tail_bytes, os.SEEK_END)
+            tail = f.read()
+
+        repo = self.config.backup_target
+        header = (
+            "================= TRUNCATED LOG =================\n"
+            "This session log was truncated for email delivery.\n"
+            f"Original size: {original_size} bytes "
+            f"(attachment budget: {self.MAX_LOG_ATTACHMENT_BYTES} bytes).\n"
+            f"Showing the first {head_bytes} and last {tail_bytes} bytes; "
+            f"{omitted} bytes in the middle were omitted.\n\n"
+            "To read the FULL log on the backup host, find the restic session\n"
+            "log in the system temp directory (prefixed 'restic_session_'):\n"
+            "    ls -t /tmp/restic_session_*.log | head -1\n\n"
+            "To rebuild a diff yourself (with repository access):\n"
+            f"    restic -r {repo} snapshots\n"
+            f"    restic -r {repo} diff <OLDER_SNAPSHOT_ID> <NEWER_SNAPSHOT_ID>\n"
+            "=================================================\n\n"
+        ).encode()
+        separator = f"\n\n... [{omitted} bytes omitted] ...\n\n".encode()
+
+        truncated_path = self.temp_dir / f"{path.stem}.truncated.log"
+        with truncated_path.open("wb") as out:
+            out.write(header)
+            out.write(head)
+            out.write(separator)
+            out.write(tail)
+
+        self.logger.warning(
+            f"Session log {path} ({original_size} bytes) exceeds the mail "
+            f"attachment budget ({self.MAX_LOG_ATTACHMENT_BYTES} bytes); "
+            f"attaching a truncated excerpt instead ({truncated_path}).",
+        )
+        return str(truncated_path)
 
     def run(self) -> None:
         """Execute the complete backup workflow with proper error handling."""
@@ -379,7 +449,9 @@ class BackupScript:
                 f"Backup completed successfully.\nSnapshot ID: {snapshot_id}\n\n"
                 f"Diff Summary:\n{diff_summary}"
             ),
-            mail_attachment=str(self.restic_client.session_log),
+            mail_attachment=self._prepare_log_attachment(
+                self.restic_client.session_log,
+            ),
         )
         return snapshot_id
 

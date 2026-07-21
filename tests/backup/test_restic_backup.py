@@ -886,6 +886,69 @@ class TestBackupScript:
             assert any("successful" in subject for subject in subjects)
             assert not any("failed" in subject for subject in subjects)
 
+    def _make_backup_script(self, config_file, mock_lock_manager) -> BackupScript:
+        """Build a BackupScript with all external dependencies mocked."""
+        with (
+            patch(
+                "opsbox.backup.restic_backup.LockManager",
+                return_value=mock_lock_manager,
+            ),
+            patch("opsbox.backup.restic_backup.EncryptedMail"),
+            patch("opsbox.backup.restic_backup.PasswordManager"),
+            patch("opsbox.backup.restic_backup.NetworkChecker"),
+            patch("opsbox.backup.restic_backup.SSHManager"),
+            patch("opsbox.backup.restic_backup.ResticClient"),
+        ):
+            return BackupScript(str(config_file))
+
+    def test_prepare_log_attachment_small_file_unchanged(
+        self,
+        temp_config,
+        mock_lock_manager,
+    ) -> None:
+        """A log within the budget is attached unchanged."""
+        config_file, _, _ = temp_config
+        backup_script = self._make_backup_script(config_file, mock_lock_manager)
+
+        small_log = backup_script.temp_dir / "restic_session_small.log"
+        small_log.write_text("just a small log\n")
+
+        assert backup_script._prepare_log_attachment(small_log) == str(small_log)
+        assert backup_script._prepare_log_attachment(None) is None
+
+    def test_prepare_log_attachment_truncates_large_file(
+        self,
+        temp_config,
+        mock_lock_manager,
+    ) -> None:
+        """An oversized log is truncated to a head+tail excerpt with a header."""
+        config_file, _, _ = temp_config
+        backup_script = self._make_backup_script(config_file, mock_lock_manager)
+
+        large_log = backup_script.temp_dir / "restic_session_large.log"
+        filler = b"x" * (5 * 1024 * 1024)
+        large_log.write_bytes(b"HEAD_MARKER\n" + filler + b"\nTAIL_MARKER")
+
+        result = backup_script._prepare_log_attachment(large_log)
+
+        assert result is not None
+        result_path = Path(result)
+        assert result_path != large_log
+        assert result_path.is_file()
+
+        content = result_path.read_bytes()
+        # Truncated file must fit under the mail attachment limit
+        assert len(content) <= backup_script.MAX_LOG_ATTACHMENT_BYTES
+        text_head = content[:4096].decode("utf-8", errors="replace")
+        assert "TRUNCATED LOG" in text_head
+        assert "bytes omitted" in content.decode("utf-8", errors="replace")
+        # Head and tail of the original are preserved, and the repo reproduction
+        # hint references the configured backup target.
+        assert b"HEAD_MARKER" in content
+        assert b"TAIL_MARKER" in content
+        assert "restic -r" in text_head
+        assert backup_script.config.backup_target in text_head
+
     def test_check_thresholds_and_send_warnings_deletion(
         self,
         temp_config,
