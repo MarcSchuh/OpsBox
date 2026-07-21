@@ -13,6 +13,7 @@ from opsbox.backup.exceptions import (
     EmptySourceError,
     NetworkUnreachableError,
     ResticBackupFailedError,
+    ResticCommandFailedError,
     ResticRepositoryLockedError,
     SSHKeyNotFoundError,
     VerificationError,
@@ -822,6 +823,68 @@ class TestBackupScript:
 
             # Verify diff was not called (insufficient snapshots)
             mock_restic_client.diff.assert_not_called()
+
+    def test_diff_failure_does_not_fail_backup(
+        self,
+        temp_config,
+        mock_lock_manager,
+    ) -> None:
+        """A failing diff report must not mark the whole backup as failed.
+
+        Diff reporting runs after the snapshot has been created and verified, so
+        a ``restic diff`` failure (e.g. a timeout) should be swallowed: the
+        backup stays successful and no failure email is sent.
+        """
+        config_file, _, _ = temp_config
+
+        mock_restic_client = Mock()
+
+        snapshot_id = ResticSnapshotId("87654321")
+        mock_restic_client.backup.return_value = snapshot_id
+        mock_restic_client.get_snapshots.return_value = [
+            ResticSnapshotId("12345678"),
+            ResticSnapshotId("a1b2c3d4"),
+            ResticSnapshotId("87654321"),
+        ]
+        # The diff step fails (simulating a timeout / restic command failure)
+        mock_restic_client.diff.side_effect = ResticCommandFailedError(
+            "Command timed out after 3600 seconds",
+        )
+        mock_restic_client.find.return_value = make_find_json()
+        mock_restic_client.check.return_value = "no errors were found"
+        mock_restic_client.log_file = Path("/tmp/restic.log")
+
+        with (
+            patch(
+                "opsbox.backup.restic_backup.LockManager",
+                return_value=mock_lock_manager,
+            ),
+            patch("opsbox.backup.restic_backup.EncryptedMail") as mock_mail_class,
+            patch("opsbox.backup.restic_backup.PasswordManager") as mock_pm_class,
+            patch("opsbox.backup.restic_backup.NetworkChecker"),
+            patch("opsbox.backup.restic_backup.SSHManager"),
+            patch(
+                "opsbox.backup.restic_backup.ResticClient",
+                return_value=mock_restic_client,
+            ),
+        ):
+            mock_password_manager = Mock()
+            mock_password_manager.get_restic_password.return_value = "test_password"
+            mock_pm_class.return_value = mock_password_manager
+
+            backup_script = BackupScript(str(config_file))
+            # Must not raise even though the diff step failed
+            backup_script.run()
+
+            mock_restic_client.diff.assert_called_once()
+
+            # The backup success email must still be sent, and no failure email.
+            subjects = [
+                call.kwargs.get("subject", "")
+                for call in mock_mail_class.return_value.send_mail_with_retries.call_args_list
+            ]
+            assert any("successful" in subject for subject in subjects)
+            assert not any("failed" in subject for subject in subjects)
 
     def test_check_thresholds_and_send_warnings_deletion(
         self,

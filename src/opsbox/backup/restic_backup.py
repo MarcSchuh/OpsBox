@@ -856,7 +856,17 @@ class BackupScript:
             )
 
     def _generate_diff_summary(self, snapshot_id: ResticSnapshotId) -> str:
-        """Generate diff summary between current and previous snapshot."""
+        """Generate diff summary between current and previous snapshot.
+
+        Diff reporting (change emails, threshold warnings, monitored-folder
+        alerts) is a *post-success* convenience: the snapshot has already been
+        created and verified separately. A failure while generating the report
+        (e.g. ``restic diff`` timing out, an unparseable diff, or a snapshot
+        lookup problem) must therefore NOT mark the whole backup as failed.
+        Such errors are caught here, logged, and turned into a summary string
+        so the success path (and any change emails produced up to that point)
+        is preserved instead of triggering a spurious failure notification.
+        """
         try:
             snapshots = self.restic_client.get_snapshots()
             if len(snapshots) < self.MIN_SNAPSHOTS_FOR_DIFF:
@@ -893,7 +903,10 @@ class BackupScript:
 
             return self._extract_diff_statistics(diff_output)
 
-        except (ValueError, TypeError, AttributeError) as e:
+        except (BackupError, ValueError, TypeError, AttributeError) as e:
+            # BackupError covers restic-level failures (ResticCommandFailedError,
+            # ResticBackupFailedError, SnapshotIDNotFoundError, ...). Reporting
+            # problems are non-fatal, so they are logged instead of propagated.
             self.logger.warning(f"Failed to generate diff summary: {e}")
             return f"Failed to generate diff summary: {e}"
 
