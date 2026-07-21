@@ -1,0 +1,49 @@
+---
+description: Always bump the version in pyproject.toml when code changes
+alwaysApply: true
+---
+
+# Version Bump Required
+
+Whenever you change, add, or update code, configuration, or behavior in this
+repository, you **must** also bump `version` in `pyproject.toml`
+(`[project]` table). Never ship a functional change without a version bump.
+
+## How to bump (Semantic Versioning: MAJOR.MINOR.PATCH)
+
+- **PATCH** (`0.4.1` -> `0.4.2`): bug fixes, refactors, docs, internal tweaks
+  with no API change.
+- **MINOR** (`0.4.1` -> `0.5.0`): new backwards-compatible feature, new config
+  option, new CLI flag.
+- **MAJOR** (`0.4.1` -> `1.0.0`): breaking change (removed/renamed public API,
+  incompatible config or behavior).
+
+Increase exactly one segment and reset the lower ones to `0`.
+
+## Rules
+
+- Edit only the single `version = "X.Y.Z"` line under `[project]`.
+- Do NOT hardcode the version in code. `pyproject.toml` is the single source of
+  truth; `__version__` is derived at runtime via
+  `importlib.metadata.version("opsbox")` (see `src/opsbox/__init__.py`), so no
+  in-code sync is needed.
+- Do the bump in the **same change** as the code edit, not as a follow-up.
+
+## Do not bump for
+
+- Pure whitespace/formatting-only runs with no behavioral effect.
+- Changes limited to files under `.cursor/` or local editor tooling.
+
+## Example
+
+```toml
+# before
+[project]
+name = "opsbox"
+version = "0.4.1"
+
+# after a bug fix
+[project]
+name = "opsbox"
+version = "0.4.2"
+```

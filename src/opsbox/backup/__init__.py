@@ -1,5 +1,7 @@
 """Backup module for OpsBox with improved architecture and error handling."""
 
+from opsbox import __version__
+
 from .config_manager import BackupConfig, ConfigManager
 from .exceptions import (
     BackupEnvironmentError,
@@ -49,6 +51,5 @@ __all__ = [
     "UserDoesNotExistError",
     "VerificationError",
     "WrongOSForResticBackupError",
+    "__version__",
 ]
-
-__version__ = "2.0.0"

@@ -44,6 +44,11 @@ class BackupConfig:
     # data at the cost of runtime.
     check_read_data_subset: str = "20%"
 
+    # Timeout (in seconds) applied to every individual restic command. ``None``
+    # (the default) means no timeout, so long-running backups are not aborted
+    # prematurely. Set a positive integer to enforce a per-command limit.
+    command_timeout: int | None = None
+
     # Network and SSH fields
     network_host: str | None = None
     ssh_key: str | None = None
@@ -89,6 +94,17 @@ class BackupConfig:
 
         if not str(self.check_read_data_subset).strip():
             error_msg = "'check_read_data_subset' must be a non-empty value"
+            raise InvalidResticConfigError(error_msg)
+
+        if self.command_timeout is not None and (
+            not isinstance(self.command_timeout, int)
+            or isinstance(self.command_timeout, bool)
+            or self.command_timeout <= 0
+        ):
+            error_msg = (
+                f"'command_timeout' must be a positive integer (seconds) or "
+                f"null for no timeout, got: {self.command_timeout!r}"
+            )
             raise InvalidResticConfigError(error_msg)
 
     def _validate_required_fields(self) -> None:
@@ -241,6 +257,7 @@ class ConfigManager:
                     "check_read_data_subset",
                     "20%",
                 ),
+                command_timeout=config_data.get("command_timeout"),
             )
 
         except KeyError as e:
@@ -290,4 +307,5 @@ class ConfigManager:
             "monitored_folders": [],  # List of folders to monitor for changes
             "min_source_entries": 1,  # Abort backup if source has fewer entries
             "check_read_data_subset": "20%",  # Portion of data verified by restic check
+            "command_timeout": None,  # Per-command timeout in seconds (null = no timeout)
         }

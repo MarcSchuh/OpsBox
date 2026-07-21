@@ -155,6 +155,7 @@ class BackupScript:
             restic_path,
             self.config.backup_target,
             self.logger,
+            command_timeout=self.config.command_timeout,
         )
 
     def _failure_mail_subject(self, error: BaseException) -> str:
