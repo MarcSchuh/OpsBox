@@ -43,14 +43,23 @@ jobs:
         run: |
           uv lock --upgrade
 
-      - name: Check for changes
+      - name: Check for changes and bump version
         id: check-changes
         run: |
+          set -euo pipefail
           git add uv.lock
           if git diff --staged --quiet; then
             echo "has_changes=false" >> $GITHUB_OUTPUT
           else
             echo "has_changes=true" >> $GITHUB_OUTPUT
+
+            # Bump the PATCH version because dependencies changed.
+            CURRENT=$(grep -E '^version = "' pyproject.toml | head -1 | sed -E 's/version = "([^"]+)"/\1/')
+            IFS='.' read -r MAJ MIN PAT <<< "${CURRENT}"
+            NEW="${MAJ}.${MIN}.$((PAT + 1))"
+            sed -i -E "0,/^version = \"[^\"]+\"/s//version = \"${NEW}\"/" pyproject.toml
+            git add pyproject.toml
+            echo "Bumped version: ${CURRENT} -> ${NEW}"
           fi
 
       - name: Create Pull Request
@@ -58,13 +67,15 @@ jobs:
         uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "chore: update dependencies"
+          commit-message: "chore: update dependencies and bump version"
           title: "chore: update dependencies"
           body: |
             This PR was automatically created by the dependency update workflow.
 
             The following dependencies have been updated:
             - See `uv.lock` for details
+
+            The project PATCH version in `pyproject.toml` was bumped accordingly.
 
             Please review and merge if the changes look good.
           branch: dependabot/update-dependencies
