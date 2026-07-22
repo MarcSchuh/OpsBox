@@ -1066,6 +1066,9 @@ class BackupScript:
         output rather than as an exception. In that case stale locks are removed
         and the check is retried once.
         """
+        self.logger.info(
+            f"Checking repository integrity with read data subset: {self.config.check_read_data_subset}",
+        )
         check_output = self.restic_client.check(self.config.check_read_data_subset)
         if is_lock_error(check_output):
             self.logger.warning(
@@ -1074,6 +1077,7 @@ class BackupScript:
             )
             self.restic_client.unlock()
             check_output = self.restic_client.check(self.config.check_read_data_subset)
+        self.logger.info(f"Repository integrity check output: {check_output}")
         return check_output
 
     def _perform_maintenance(self) -> None:
@@ -1126,7 +1130,7 @@ class BackupScript:
             self.logger.info("Maintenance completed successfully")
             self.encrypted_mail.send_mail_with_retries(
                 subject=f"Backup maintenance {self.config.backup_title} successful",
-                message="Repository maintenance completed successfully.",
+                message=f"Repository maintenance completed successfully.\n\nCheck output:\n{check_output}",
             )
 
         except Exception as e:
