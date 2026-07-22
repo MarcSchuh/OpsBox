@@ -92,33 +92,6 @@ class TestNetworkChecker:
             ):
                 network_checker.check_network_connectivity_or_raise("example.com")
 
-    def test_check_multiple_hosts(self, network_checker) -> None:
-        """Test that check_multiple_hosts checks multiple hosts and returns status for each."""
-        hosts = ["host1.com", "host2.com", "host3.com"]
-
-        mock_results = [
-            Mock(
-                returncode=0,
-                stdout="3 packets transmitted, 3 received, 0% packet loss",
-            ),  # host1: reachable
-            Mock(
-                returncode=1,
-                stdout="3 packets transmitted, 0 received, 100% packet loss",
-            ),  # host2: unreachable
-            Mock(
-                returncode=0,
-                stdout="3 packets transmitted, 3 received, 0% packet loss",
-            ),  # host3: reachable
-        ]
-
-        with patch("subprocess.run", side_effect=mock_results):
-            results = network_checker.check_multiple_hosts(hosts)
-
-            assert results["host1.com"] is True
-            assert results["host2.com"] is False
-            assert results["host3.com"] is True
-            assert len(results) == 3
-
     def test_check_network_connectivity_custom_parameters(
         self,
         network_checker,

@@ -42,7 +42,11 @@ class NetworkChecker:
                 timeout=timeout,
             )
 
-            if result.returncode == 0 and "0% packet loss" in result.stdout:
+            # ``ping`` already reports reachability through its exit code (0 =
+            # at least one reply received). Parsing stdout for a phrase like
+            # "0% packet loss" would be locale-dependent and could wrongly mark
+            # a reachable host as unreachable on non-English systems.
+            if result.returncode == 0:
                 self.logger.info(f"Successfully reached {host}")
                 return True
             self.logger.info(f"Cannot reach {host}")
@@ -75,25 +79,3 @@ class NetworkChecker:
         if not self.check_network_connectivity(host, ping_count, timeout):
             error_msg = f"Host {host} is not reachable"
             raise NetworkUnreachableError(error_msg)
-
-    def check_multiple_hosts(
-        self,
-        hosts: list[str],
-        ping_count: int = 3,
-        timeout: int = 30,
-    ) -> dict[str, bool]:
-        """Check connectivity to multiple hosts.
-
-        Args:
-            hosts: List of hosts to check
-            ping_count: Number of ping attempts per host
-            timeout: Timeout in seconds for each ping operation
-
-        Returns:
-            Dictionary mapping host names to connectivity status
-
-        """
-        results = {}
-        for host in hosts:
-            results[host] = self.check_network_connectivity(host, ping_count, timeout)
-        return results

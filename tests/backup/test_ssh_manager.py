@@ -25,30 +25,60 @@ class TestSSHManager:
         return SSHManager(logger)
 
     def test_get_ssh_auth_sock_success(self, ssh_manager) -> None:
-        """Test that SSH auth socket is returned for existing user."""
+        """Test that the per-user keyring socket is derived from the uid."""
         mock_user_info = Mock()
         mock_user_info.pw_uid = 1000
 
         with patch("pwd.getpwnam", return_value=mock_user_info):
-            with patch.dict(os.environ, {}, clear=False):
-                auth_sock = ssh_manager.get_ssh_auth_sock("testuser")
+            # Running as a different user (root) -> the ambient SSH_AUTH_SOCK
+            # must be ignored and the per-user path derived instead.
+            with patch("os.getuid", return_value=0):
+                with patch.dict(
+                    os.environ,
+                    {"SSH_AUTH_SOCK": "/root/agent.sock"},
+                    clear=False,
+                ):
+                    auth_sock = ssh_manager.get_ssh_auth_sock("testuser")
 
-                assert auth_sock == "/run/user/1000/keyring/ssh"
+                    assert auth_sock == "/run/user/1000/keyring/ssh"
 
     def test_get_ssh_auth_sock_with_env_var(self, ssh_manager) -> None:
-        """Test that existing SSH_AUTH_SOCK environment variable is used."""
+        """Test that SSH_AUTH_SOCK is honored when running as the target user."""
         mock_user_info = Mock()
         mock_user_info.pw_uid = 1000
 
         with patch("pwd.getpwnam", return_value=mock_user_info):
-            with patch.dict(
-                os.environ,
-                {"SSH_AUTH_SOCK": "/custom/path/sock"},
-                clear=False,
-            ):
-                auth_sock = ssh_manager.get_ssh_auth_sock("testuser")
+            # Process runs as the requested user -> the ambient socket applies.
+            with patch("os.getuid", return_value=1000):
+                with patch.dict(
+                    os.environ,
+                    {"SSH_AUTH_SOCK": "/custom/path/sock"},
+                    clear=False,
+                ):
+                    auth_sock = ssh_manager.get_ssh_auth_sock("testuser")
 
-                assert auth_sock == "/custom/path/sock"
+                    assert auth_sock == "/custom/path/sock"
+
+    def test_get_ssh_auth_sock_env_var_ignored_for_other_user(
+        self,
+        ssh_manager,
+    ) -> None:
+        """SSH_AUTH_SOCK of a different user is not used for the target user."""
+        mock_user_info = Mock()
+        mock_user_info.pw_uid = 1000
+
+        with patch("pwd.getpwnam", return_value=mock_user_info):
+            # Current process is uid 1234, target user is uid 1000: the env var
+            # belongs to the wrong user and must be ignored.
+            with patch("os.getuid", return_value=1234):
+                with patch.dict(
+                    os.environ,
+                    {"SSH_AUTH_SOCK": "/other/user/sock"},
+                    clear=False,
+                ):
+                    auth_sock = ssh_manager.get_ssh_auth_sock("testuser")
+
+                    assert auth_sock == "/run/user/1000/keyring/ssh"
 
     def test_get_ssh_auth_sock_user_not_found(self, ssh_manager) -> None:
         """Test that UserDoesNotExistError is raised for non-existent user."""

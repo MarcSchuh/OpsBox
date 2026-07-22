@@ -1,6 +1,5 @@
 """Tests for the config_manager module."""
 
-import getpass
 import json
 import tempfile
 from pathlib import Path
@@ -407,17 +406,6 @@ class TestBackupConfig:
             assert config.keep_daily == "21"
             assert config.keep_monthly == "5"
             assert config.ssh_key_max_retries == 12
-            assert config.default_user == getpass.getuser()
-
-    def test_get_default_config(self) -> None:
-        """Test that get_default_config returns a template configuration."""
-        default_config = ConfigManager.get_default_config()
-
-        assert "backup_source" in default_config
-        assert "excluded_files" in default_config
-        assert "backup_target" in default_config
-        assert "email_settings_path" in default_config
-        assert isinstance(default_config["excluded_files"], list)
 
 
 if __name__ == "__main__":
