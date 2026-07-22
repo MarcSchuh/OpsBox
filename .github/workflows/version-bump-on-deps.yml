@@ -1,0 +1,78 @@
+name: Version Bump on Dependabot PRs
+
+# Automatically bumps the PATCH version in pyproject.toml on pull requests
+# opened by Dependabot, and pushes the change back into the PR branch.
+#
+# Why this works without a PAT:
+#   Dependabot-triggered `pull_request` runs get a read-only GITHUB_TOKEN by
+#   default. Declaring `permissions: contents: write` elevates it so the push
+#   to the PR branch (which lives in this repo, not a fork) succeeds. Commits
+#   made with GITHUB_TOKEN do not re-trigger workflows, so there is no loop.
+#   `pull_request_target` is intentionally avoided: for Dependabot it yields a
+#   read-only token and would checkout untrusted head code with a write token.
+#
+# Note: adding this commit means Dependabot stops auto-rebasing the PR, since a
+# foreign commit is now on the branch. That is fine for a version bump.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  bump-version:
+    # Only run for PRs opened by Dependabot.
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Bump PATCH version (idempotent)
+        id: bump
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+
+          extract_version() {
+            grep -E '^version = "' "$1" | head -1 | sed -E 's/version = "([^"]+)"/\1/'
+          }
+
+          HEAD_VERSION="$(extract_version pyproject.toml)"
+          BASE_VERSION="$(git show "origin/${BASE_REF}:pyproject.toml" | grep -E '^version = "' | head -1 | sed -E 's/version = "([^"]+)"/\1/')"
+
+          echo "Base (${BASE_REF}) version: ${BASE_VERSION}"
+          echo "Head version:            ${HEAD_VERSION}"
+
+          # If the head branch already differs from base, the version was
+          # already bumped in this PR (e.g. on an earlier run) -> do nothing.
+          if [ "${HEAD_VERSION}" != "${BASE_VERSION}" ]; then
+            echo "Version already bumped in this PR, skipping."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          IFS='.' read -r MAJ MIN PAT <<< "${HEAD_VERSION}"
+          NEW_VERSION="${MAJ}.${MIN}.$((PAT + 1))"
+          sed -i -E "0,/^version = \"[^\"]+\"/s//version = \"${NEW_VERSION}\"/" pyproject.toml
+
+          echo "Bumped version: ${HEAD_VERSION} -> ${NEW_VERSION}"
+          echo "new_version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and push
+        if: steps.bump.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml
+          git commit -m "chore: bump version to ${{ steps.bump.outputs.new_version }} for dependency update"
+          git push
