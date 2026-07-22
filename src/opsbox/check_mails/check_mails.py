@@ -415,6 +415,15 @@ def main() -> None:
     email_settings = EncryptedMail.load_email_settings(Path(config.email_settings_path))
     logger.info("Loaded email settings")
 
+    # IMAP mailbox checking needs a concrete password; unlike sending mail there
+    # is no secret-tool lookup fallback here, so a missing password is fatal.
+    imap_password = email_settings.password
+    if imap_password is None:
+        error_msg = (
+            "Email settings must include a 'password' for IMAP mailbox checking."
+        )
+        raise ValueError(error_msg)
+
     script_name = Path(__file__).name
     lock_file_path = Path(tempfile.gettempdir()) / f"{script_name}.lock"
     lock_manager = LockManager(
@@ -429,7 +438,7 @@ def main() -> None:
         EmailChecker(
             EmailCheckerConfig(
                 email_account=email_settings.user,
-                password=email_settings.password,
+                password=imap_password,
                 imap_server=email_settings.host,
                 logger=logger,
                 imap_folder=config.imap_folder,
