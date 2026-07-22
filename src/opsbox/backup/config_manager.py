@@ -1,11 +1,8 @@
 """Configuration management for backup operations."""
 
-import getpass
 import json
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 import yaml
 
@@ -26,13 +23,12 @@ class BackupConfig:
     password_lookup_2: str | None = None
 
     # Optional fields with defaults
-    default_user: str = field(default_factory=lambda: getpass.getuser())
     keep_last: str = "10"
     keep_daily: str = "21"
     keep_monthly: str = "5"
     ssh_key_max_retries: int = 12
     restic_password: str | None = None
-    backup_title: str = "Default backupt title"
+    backup_title: str = "Default backup title"
 
     # Minimum number of entries the backup source must contain. The backup is
     # aborted if fewer entries are found (protects against unmounted/empty
@@ -53,7 +49,6 @@ class BackupConfig:
     network_host: str | None = None
     ssh_key: str | None = None
     ssh_user: str | None = None
-    user_id: int | None = None
 
     # Threshold fields for warning emails
     deletion_threshold: int | None = None
@@ -240,13 +235,11 @@ class ConfigManager:
                 ssh_key=config_data.get("ssh_key"),
                 ssh_user=config_data.get("ssh_user"),
                 network_host=config_data.get("network_host"),
-                default_user=config_data.get("default_user", getpass.getuser()),
                 keep_last=config_data.get("keep_last", "10"),
                 keep_daily=config_data.get("keep_daily", "21"),
                 keep_monthly=config_data.get("keep_monthly", "5"),
                 ssh_key_max_retries=int(config_data.get("ssh_key_max_retries", 12)),
                 restic_password=config_data.get("restic_password"),
-                user_id=config_data.get("user_id", os.getuid()),
                 deletion_threshold=config_data.get("deletion_threshold"),
                 alteration_threshold=config_data.get("alteration_threshold"),
                 addition_threshold=config_data.get("addition_threshold"),
@@ -266,46 +259,3 @@ class ConfigManager:
         except Exception as e:
             error_msg = f"Configuration validation failed: {e}"
             raise InvalidResticConfigError(error_msg) from e
-
-    @staticmethod
-    def validate_config(config: BackupConfig) -> None:
-        """Validate a configuration object.
-
-        Args:
-            config: BackupConfig instance to validate
-
-        Raises:
-            InvalidResticConfigError: If configuration is invalid
-
-        """
-        # This is handled by __post_init__ in BackupConfig, but we can add additional validation here
-
-    @staticmethod
-    def get_default_config() -> dict[str, Any]:
-        """Get a template configuration dictionary."""
-        return {
-            "backup_source": "/path/to/backup/source",
-            "excluded_files": ["*.tmp", "*.log"],
-            "backup_target": "sftp:user@host:/path/to/repo",
-            "password_lookup_1": None,  # Optional when restic_password is provided
-            "password_lookup_2": None,  # Optional when restic_password is provided
-            "email_settings_path": "/path/to/email/settings.json",
-            "file_to_check": "important_file.txt",
-            "default_user": "backup_user",
-            "keep_last": "10",
-            "keep_daily": "21",
-            "keep_monthly": "5",
-            "ssh_key_max_retries": 12,
-            "network_host": None,
-            "ssh_key": None,
-            "ssh_user": None,
-            "restic_password": None,  # If provided, password_lookup_1/2 become optional
-            "user_id": None,
-            "deletion_threshold": None,  # Send warning if more than this many files deleted
-            "alteration_threshold": None,  # Send warning if more than this many files altered
-            "addition_threshold": None,  # Send warning if more than this many files added
-            "monitored_folders": [],  # List of folders to monitor for changes
-            "min_source_entries": 1,  # Abort backup if source has fewer entries
-            "check_read_data_subset": "20%",  # Portion of data verified by restic check
-            "command_timeout": None,  # Per-command timeout in seconds (null = no timeout)
-        }

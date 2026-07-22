@@ -7,10 +7,10 @@ import os
 import sys
 import tempfile
 from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path
 from typing import TypeVar
 
+from opsbox.backup.backup_notifier import BackupNotifier
 from opsbox.backup.config_manager import ConfigManager
 from opsbox.backup.exceptions import (
     BackupError,
@@ -19,7 +19,6 @@ from opsbox.backup.exceptions import (
     InvalidResticConfigError,
     MaintenanceError,
     NetworkUnreachableError,
-    ResticBackupFailedError,
     ResticRepositoryLockedError,
     SnapshotIDNotFoundError,
     SSHKeyNotFoundError,
@@ -30,6 +29,7 @@ from opsbox.backup.exceptions import (
 from opsbox.backup.network_checker import NetworkChecker
 from opsbox.backup.password_manager import PasswordManager
 from opsbox.backup.restic_client import ResticClient, is_lock_error
+from opsbox.backup.restic_diff import ResticDiffParser
 from opsbox.backup.snapshot_id import ResticSnapshotId
 from opsbox.backup.ssh_manager import SSHManager
 from opsbox.encrypted_mail import EncryptedMail
@@ -39,39 +39,15 @@ from opsbox.logging import LoggingConfig, configure_logging
 _T = TypeVar("_T")
 
 
-@dataclass
-class ResticDiff:
-    """Represents the result of a restic diff operation.
+class BackupScript:
+    """Refactored backup script with improved architecture and error handling.
 
-    Attributes:
-        added_files: List of added file paths
-        altered_files: List of altered file paths
-        deleted_files: List of deleted file paths
-        snapshot_id: The snapshot ID this diff is for
-
+    ``BackupScript`` orchestrates the backup workflow. Diff interpretation is
+    delegated to :class:`~opsbox.backup.restic_diff.ResticDiffParser` and all
+    notification emails to :class:`~opsbox.backup.backup_notifier.BackupNotifier`.
     """
 
-    added_files: list[Path]
-    altered_files: list[Path]
-    deleted_files: list[Path]
-    snapshot_id: ResticSnapshotId
-
-
-class BackupScript:
-    """Refactored backup script with improved architecture and error handling."""
-
     MIN_SNAPSHOTS_FOR_DIFF = 2
-    MAX_FILES_IN_EMAIL = 200
-
-    # Session logs are attached to notification emails. EncryptedMail drops any
-    # attachment at/above its 5 MB limit, so an oversized log (e.g. a restic
-    # diff of thousands of files written verbatim) would leave the mail without
-    # any log at all. Such logs are truncated to this budget (kept below the
-    # 5 MB limit for encoding/encryption overhead), preserving the head and tail
-    # plus a header explaining how to obtain the full log on the host.
-    MAX_LOG_ATTACHMENT_BYTES = 4 * 1024 * 1024
-    LOG_ATTACHMENT_HEAD_BYTES = 1 * 1024 * 1024
-    LOG_ATTACHMENT_TAIL_BYTES = 2 * 1024 * 1024
 
     def __init__(
         self,
@@ -159,8 +135,6 @@ class BackupScript:
         self.network_checker = NetworkChecker(self.logger)
         self.ssh_manager = SSHManager(self.logger)
 
-        # Setup cache directory for restic
-
         self.restic_client = ResticClient(
             restic_path,
             self.config.backup_target,
@@ -168,86 +142,14 @@ class BackupScript:
             command_timeout=self.config.command_timeout,
         )
 
-    def _failure_mail_subject(self, error: BaseException) -> str:
-        """Pick a failure mail subject that matches the failing stage."""
-        title = self.config.backup_title
-        if isinstance(error, VerificationError):
-            return f"Backup {title} verification failed"
-        if isinstance(error, MaintenanceError):
-            return f"Backup maintenance {title} failed"
-        return f"Backup {title} failed"
-
-    def _send_failure_email(self, error: BaseException) -> None:
-        """Send a single failure notification with the (bounded) session log."""
-        session_log = getattr(self.restic_client, "session_log", None)
-        attachment = self._prepare_log_attachment(session_log)
-        self.encrypted_mail.send_mail_with_retries(
-            subject=self._failure_mail_subject(error),
-            message=f"Backup failed: {error}",
-            mail_attachment=attachment,
+        # Diff interpretation and notifications live in dedicated collaborators
+        self.diff_parser = ResticDiffParser(self.logger)
+        self.notifier = BackupNotifier(
+            self.encrypted_mail,
+            self.config,
+            self.logger,
+            self.temp_dir,
         )
-
-    def _prepare_log_attachment(self, log_path: str | Path | None) -> str | None:
-        """Return a session-log attachment path that fits the mail size limit.
-
-        The full restic session log can grow large: a diff of thousands of files
-        is written verbatim. ``EncryptedMail`` silently drops attachments that
-        exceed its size limit, which would leave failure/success mails without
-        any log at all. To avoid that, an oversized log is truncated to a
-        head+tail excerpt with a header explaining that it was cut and how to
-        obtain the full log (and rebuild the diff) on the host. Logs within the
-        budget are returned unchanged.
-        """
-        if not isinstance(log_path, (str, Path)):
-            return None
-        path = Path(log_path)
-        if not path.is_file():
-            return None
-
-        original_size = path.stat().st_size
-        if original_size <= self.MAX_LOG_ATTACHMENT_BYTES:
-            return str(path)
-
-        head_bytes = self.LOG_ATTACHMENT_HEAD_BYTES
-        tail_bytes = self.LOG_ATTACHMENT_TAIL_BYTES
-        omitted = original_size - head_bytes - tail_bytes
-
-        with path.open("rb") as f:
-            head = f.read(head_bytes)
-            f.seek(-tail_bytes, os.SEEK_END)
-            tail = f.read()
-
-        repo = self.config.backup_target
-        header = (
-            "================= TRUNCATED LOG =================\n"
-            "This session log was truncated for email delivery.\n"
-            f"Original size: {original_size} bytes "
-            f"(attachment budget: {self.MAX_LOG_ATTACHMENT_BYTES} bytes).\n"
-            f"Showing the first {head_bytes} and last {tail_bytes} bytes; "
-            f"{omitted} bytes in the middle were omitted.\n\n"
-            "To read the FULL log on the backup host, find the restic session\n"
-            "log in the system temp directory (prefixed 'restic_session_'):\n"
-            "    ls -t /tmp/restic_session_*.log | head -1\n\n"
-            "To rebuild a diff yourself (with repository access):\n"
-            f"    restic -r {repo} snapshots\n"
-            f"    restic -r {repo} diff <OLDER_SNAPSHOT_ID> <NEWER_SNAPSHOT_ID>\n"
-            "=================================================\n\n"
-        ).encode()
-        separator = f"\n\n... [{omitted} bytes omitted] ...\n\n".encode()
-
-        truncated_path = self.temp_dir / f"{path.stem}.truncated.log"
-        with truncated_path.open("wb") as out:
-            out.write(header)
-            out.write(head)
-            out.write(separator)
-            out.write(tail)
-
-        self.logger.warning(
-            f"Session log {path} ({original_size} bytes) exceeds the mail "
-            f"attachment budget ({self.MAX_LOG_ATTACHMENT_BYTES} bytes); "
-            f"attaching a truncated excerpt instead ({truncated_path}).",
-        )
-        return str(truncated_path)
 
     def run(self) -> None:
         """Execute the complete backup workflow with proper error handling."""
@@ -287,22 +189,19 @@ class BackupScript:
             ) as e:
                 # These are expected failures that should be handled gracefully
                 self.logger.warning(f"Backup skipped due to: {e}")
-                self.encrypted_mail.send_mail_with_retries(
-                    subject=f"Backup {self.config.backup_title} skipped",
-                    message=f"Backup was skipped: {e}",
-                )
+                self.notifier.send_skipped(e)
             except BackupError as e:
                 # Single failure notification for the whole workflow
                 self.logger.exception("Backup failed")
-                self._send_failure_email(e)
+                self.notifier.send_failure(
+                    e,
+                    getattr(self.restic_client, "session_log", None),
+                )
                 raise
             except Exception as e:
                 # Handle unexpected errors
                 self.logger.exception("Unexpected error during backup")
-                self.encrypted_mail.send_mail_with_retries(
-                    subject=f"Backup {self.config.backup_title} script error",
-                    message=f"Unexpected error: {e}",
-                )
+                self.notifier.send_unexpected_error(e)
                 error_msg = f"Unexpected error: {e}"
                 raise BackupError(error_msg, original_error=e) from e
 
@@ -443,489 +342,12 @@ class BackupScript:
 
         # Send success notification with diff summary
         diff_summary = self._generate_diff_summary(snapshot_id)
-        self.encrypted_mail.send_mail_with_retries(
-            subject=f"Backup {self.config.backup_title} successful",
-            message=(
-                f"Backup completed successfully.\nSnapshot ID: {snapshot_id}\n\n"
-                f"Diff Summary:\n{diff_summary}"
-            ),
-            mail_attachment=self._prepare_log_attachment(
-                self.restic_client.session_log,
-            ),
+        self.notifier.send_success(
+            snapshot_id,
+            diff_summary,
+            self.restic_client.session_log,
         )
         return snapshot_id
-
-    def _parse_diff_line(self, line: str) -> dict | None:
-        """Parse a single line of ``restic diff --json`` output into a message.
-
-        Returns the decoded message dict, or None for blank lines, non-JSON
-        lines (logged as a warning) and non-dict payloads.
-        """
-        line_stripped = line.strip()
-        if not line_stripped:
-            return None
-
-        try:
-            message = json.loads(line_stripped)
-        except json.JSONDecodeError:
-            # stdout is captured cleanly, so any non-JSON line is unexpected
-            self.logger.warning(
-                f"Ignoring non-JSON line in diff output: {line_stripped}",
-            )
-            return None
-
-        if not isinstance(message, dict):
-            return None
-        return message
-
-    def _classify_change(
-        self,
-        message: dict,
-        *,
-        added_files: list[Path],
-        altered_files: list[Path],
-        deleted_files: list[Path],
-    ) -> None:
-        """Append a ``change`` message's path to the matching change list.
-
-        A single change carries one modifier; "+" added, "-" removed, "M"
-        content modified. Metadata-only changes (e.g. "U"/"T") are intentionally
-        ignored.
-        """
-        path_str = message.get("path")
-        modifier = message.get("modifier", "")
-        if not path_str:
-            return
-
-        path = Path(path_str)
-        if "+" in modifier:
-            added_files.append(path)
-        elif "-" in modifier:
-            deleted_files.append(path)
-        elif "M" in modifier:
-            altered_files.append(path)
-
-    def _parse_diff_output(
-        self,
-        diff_output: str,
-        snapshot_id: ResticSnapshotId,
-    ) -> ResticDiff:
-        """Parse ``restic diff --json`` output into added/altered/deleted files.
-
-        The output is newline-delimited JSON. Each change is a message of type
-        ``change`` with a ``path`` and a ``modifier`` string (e.g. "+", "-",
-        "M", or combinations such as "MU").
-
-        A well-formed ``restic diff --json`` run always ends with a
-        ``statistics`` message. If that message is missing, the diff did not
-        complete correctly, so the output is considered invalid and an error is
-        raised (the report must succeed; a broken report means something went
-        wrong with the run).
-
-        Args:
-            diff_output: The raw JSON output from the restic diff command
-            snapshot_id: The snapshot ID this diff is for
-
-        Returns:
-            ResticDiff object containing added, altered, and deleted files
-
-        Raises:
-            ResticBackupFailedError: If the diff output is empty or does not
-                contain the terminating ``statistics`` message
-
-        """
-        deleted_files: list[Path] = []
-        altered_files: list[Path] = []
-        added_files: list[Path] = []
-        saw_statistics = False
-
-        if not diff_output or not diff_output.strip():
-            error_msg = "restic diff produced no output"
-            self.logger.error(error_msg)
-            raise ResticBackupFailedError(error_msg)
-
-        for line in diff_output.splitlines():
-            message = self._parse_diff_line(line)
-            if message is None:
-                continue
-
-            message_type = message.get("message_type")
-            if message_type == "statistics":
-                saw_statistics = True
-                continue
-            if message_type != "change":
-                continue
-
-            self._classify_change(
-                message,
-                added_files=added_files,
-                altered_files=altered_files,
-                deleted_files=deleted_files,
-            )
-
-        if not saw_statistics:
-            error_msg = (
-                "restic diff --json did not emit a terminating 'statistics' "
-                "message; the diff output is incomplete or invalid"
-            )
-            self.logger.error(error_msg)
-            raise ResticBackupFailedError(error_msg)
-
-        return ResticDiff(
-            added_files=added_files,
-            altered_files=altered_files,
-            deleted_files=deleted_files,
-            snapshot_id=snapshot_id,
-        )
-
-    def _extract_diff_statistics(self, diff_output: str) -> str:
-        """Extract a human-readable summary from ``restic diff --json`` output.
-
-        Looks for the ``statistics`` message emitted at the end of the diff.
-
-        Args:
-            diff_output: The raw JSON output from the restic diff command
-
-        Returns:
-            A formatted summary string, or a fallback message if unavailable
-
-        """
-        for line in diff_output.splitlines():
-            line_stripped = line.strip()
-            if not line_stripped:
-                continue
-            try:
-                message = json.loads(line_stripped)
-            except json.JSONDecodeError:
-                continue
-            if (
-                not isinstance(message, dict)
-                or message.get("message_type") != "statistics"
-            ):
-                continue
-
-            added = message.get("added", {}) or {}
-            removed = message.get("removed", {}) or {}
-            changed_files = message.get("changed_files")
-
-            summary_lines = []
-            if changed_files is not None:
-                summary_lines.append(f"Changed files: {changed_files}")
-            summary_lines.append(
-                f"Added:   files={added.get('files', 0)}, "
-                f"dirs={added.get('dirs', 0)}, bytes={added.get('bytes', 0)}",
-            )
-            summary_lines.append(
-                f"Removed: files={removed.get('files', 0)}, "
-                f"dirs={removed.get('dirs', 0)}, bytes={removed.get('bytes', 0)}",
-            )
-            return "\n".join(summary_lines)
-
-        return "No summary available."
-
-    def _send_threshold_warning(
-        self,
-        change_type: str,
-        files: list[Path],
-        threshold: int,
-        snapshot_id: ResticSnapshotId,
-    ) -> None:
-        """Send a warning email because a change-count threshold was exceeded.
-
-        Args:
-            change_type: The kind of change ("deleted", "altered" or "added")
-            files: The affected files
-            threshold: The configured threshold that was exceeded
-            snapshot_id: The snapshot ID this change belongs to
-
-        """
-        self.logger.warning(
-            f"{change_type.capitalize()} threshold exceeded: {len(files)} files "
-            f"{change_type} (threshold: {threshold})",
-        )
-        file_list = "\n".join(str(path) for path in files[: self.MAX_FILES_IN_EMAIL])
-        if len(files) > self.MAX_FILES_IN_EMAIL:
-            file_list += f"\n... and {len(files) - self.MAX_FILES_IN_EMAIL} more files"
-        self.encrypted_mail.send_mail_with_retries(
-            subject=(
-                f"Backup {self.config.backup_title} Warning: {len(files)} files "
-                f"{change_type} (threshold: {threshold})"
-            ),
-            message=(
-                f"Warning: The backup detected {len(files)} {change_type} files, "
-                f"which exceeds the threshold of {threshold}.\n\n"
-                f"Snapshot ID: {snapshot_id}\n\n"
-                f"{change_type.capitalize()} files:\n{file_list}"
-            ),
-        )
-
-    def _check_thresholds_and_send_warnings(
-        self,
-        diff: ResticDiff,
-    ) -> None:
-        """Check thresholds and send warning emails if exceeded.
-
-        Deleted, altered and added files are each checked against their own
-        independent threshold.
-
-        Args:
-            diff: ResticDiff object containing file changes and snapshot ID
-
-        """
-        threshold_checks: tuple[tuple[str, list[Path], int | None], ...] = (
-            ("deleted", diff.deleted_files, self.config.deletion_threshold),
-            ("altered", diff.altered_files, self.config.alteration_threshold),
-            ("added", diff.added_files, self.config.addition_threshold),
-        )
-
-        for change_type, files, threshold in threshold_checks:
-            if threshold is not None and len(files) > threshold:
-                self._send_threshold_warning(
-                    change_type,
-                    files,
-                    threshold,
-                    diff.snapshot_id,
-                )
-
-    def _is_file_in_monitored_folder(self, file_path: Path) -> bool:
-        """Check if a file is within any of the monitored folders.
-
-        Args:
-            file_path: Path to the file to check
-
-        Returns:
-            True if the file is in a monitored folder, False otherwise
-
-        """
-        if not self.config.monitored_folders:
-            return False
-
-        # Normalize the file path
-        normalized_file_path = file_path.as_posix()
-
-        for monitored_folder in self.config.monitored_folders:
-            # Normalize the monitored folder path
-            normalized_folder = Path(monitored_folder).as_posix()
-            # Ensure folder path ends with / for proper matching
-            if not normalized_folder.endswith("/"):
-                normalized_folder += "/"
-
-            # Check if file path starts with the monitored folder path
-            if normalized_file_path.startswith(normalized_folder):
-                return True
-
-        return False
-
-    def _filter_files_in_monitored_folders(
-        self,
-        files: list[Path],
-    ) -> list[Path]:
-        """Filter files to only include those in monitored folders.
-
-        Args:
-            files: List of file paths to filter
-
-        Returns:
-            List of files that are in monitored folders
-
-        """
-        return [
-            file_path
-            for file_path in files
-            if self._is_file_in_monitored_folder(file_path)
-        ]
-
-    def _is_file_in_specific_monitored_folder(
-        self,
-        file_path: Path,
-        monitored_folder: str,
-    ) -> bool:
-        """Check if a file is within a specific monitored folder.
-
-        Args:
-            file_path: Path to the file to check
-            monitored_folder: Path to the monitored folder to check against
-
-        Returns:
-            True if the file is in the specified monitored folder, False otherwise
-
-        """
-        # Normalize the file path
-        normalized_file_path = file_path.as_posix()
-
-        # Normalize the monitored folder path
-        normalized_folder = Path(monitored_folder).as_posix()
-        # Ensure folder path ends with / for proper matching
-        if not normalized_folder.endswith("/"):
-            normalized_folder += "/"
-
-        # Check if file path starts with the monitored folder path
-        return normalized_file_path.startswith(normalized_folder)
-
-    def _filter_files_for_monitored_folder(
-        self,
-        files: list[Path],
-        monitored_folder: str,
-    ) -> list[Path]:
-        """Filter files to only include those in a specific monitored folder.
-
-        Args:
-            files: List of file paths to filter
-            monitored_folder: Path to the monitored folder to filter for
-
-        Returns:
-            List of files that are in the specified monitored folder
-
-        """
-        return [
-            file_path
-            for file_path in files
-            if self._is_file_in_specific_monitored_folder(file_path, monitored_folder)
-        ]
-
-    def _check_monitored_folders_and_send_alerts(
-        self,
-        diff: ResticDiff,
-    ) -> None:
-        """Check for changes in monitored folders and send email alerts.
-
-        Sends a separate email for each monitored folder and change type (added,
-        altered, deleted) containing only the files affected in that specific
-        folder. Any change inside a monitored folder triggers a notification.
-
-        Args:
-            diff: ResticDiff object containing file changes and snapshot ID
-
-        """
-        if not self.config.monitored_folders:
-            return
-
-        # Every change type is reported so that any modification triggers an alert.
-        change_categories: tuple[tuple[str, list[Path]], ...] = (
-            ("added", diff.added_files),
-            ("altered", diff.altered_files),
-            ("deleted", diff.deleted_files),
-        )
-
-        for monitored_folder in self.config.monitored_folders:
-            for change_type, files in change_categories:
-                folder_files = self._filter_files_for_monitored_folder(
-                    files,
-                    monitored_folder,
-                )
-                if folder_files:
-                    self._send_monitored_folder_alert(
-                        monitored_folder,
-                        change_type,
-                        folder_files,
-                        diff.snapshot_id,
-                    )
-
-    def _send_monitored_folder_alert(
-        self,
-        monitored_folder: str,
-        change_type: str,
-        files: list[Path],
-        snapshot_id: ResticSnapshotId,
-    ) -> None:
-        """Send an alert email for one change type in a monitored folder.
-
-        Args:
-            monitored_folder: The monitored folder the files belong to
-            change_type: The kind of change ("added", "altered" or "deleted")
-            files: The affected files inside the monitored folder
-            snapshot_id: The snapshot ID this change belongs to
-
-        """
-        self.logger.warning(
-            f"Files {change_type} in monitored folder {monitored_folder}: "
-            f"{len(files)} files",
-        )
-        file_list = "\n".join(str(path) for path in files[: self.MAX_FILES_IN_EMAIL])
-        if len(files) > self.MAX_FILES_IN_EMAIL:
-            file_list += f"\n... and {len(files) - self.MAX_FILES_IN_EMAIL} more files"
-        self.encrypted_mail.send_mail_with_retries(
-            subject=(
-                f"Backup {self.config.backup_title} Alert: {len(files)} files "
-                f"{change_type} in monitored folder: {monitored_folder}"
-            ),
-            message=(
-                f"Alert: The backup detected {len(files)} {change_type} files "
-                f"in monitored folder: {monitored_folder}\n\n"
-                f"Snapshot ID: {snapshot_id}\n\n"
-                f"{change_type.capitalize()} files:\n{file_list}"
-            ),
-        )
-
-    def _send_file_changes_email(
-        self,
-        diff: ResticDiff,
-    ) -> None:
-        """Send separate emails for added, altered, and deleted files.
-
-        Args:
-            diff: ResticDiff object containing file changes and snapshot ID
-
-        """
-        # Send email for added files
-        if diff.added_files:
-            self.logger.info(
-                f"Sending email for {len(diff.added_files)} added files (Snapshot: {diff.snapshot_id})",
-            )
-            added_list = "\n".join(
-                str(path) for path in diff.added_files[: self.MAX_FILES_IN_EMAIL]
-            )
-            if len(diff.added_files) > self.MAX_FILES_IN_EMAIL:
-                added_list += f"\n... and {len(diff.added_files) - self.MAX_FILES_IN_EMAIL} more files"
-            message = (
-                f"Backup detected {len(diff.added_files)} added files.\n\n"
-                f"Snapshot ID: {diff.snapshot_id}\n\n"
-                f"Added files:\n{added_list}"
-            )
-            self.encrypted_mail.send_mail_with_retries(
-                subject=f"Backup {self.config.backup_title}: {len(diff.added_files)} files added (Snapshot: {diff.snapshot_id})",
-                message=message,
-            )
-
-        # Send email for altered files
-        if diff.altered_files:
-            self.logger.info(
-                f"Sending email for {len(diff.altered_files)} altered files (Snapshot: {diff.snapshot_id})",
-            )
-            altered_list = "\n".join(
-                str(path) for path in diff.altered_files[: self.MAX_FILES_IN_EMAIL]
-            )
-            if len(diff.altered_files) > self.MAX_FILES_IN_EMAIL:
-                altered_list += f"\n... and {len(diff.altered_files) - self.MAX_FILES_IN_EMAIL} more files"
-            message = (
-                f"Backup detected {len(diff.altered_files)} altered files.\n\n"
-                f"Snapshot ID: {diff.snapshot_id}\n\n"
-                f"Altered files:\n{altered_list}"
-            )
-            self.encrypted_mail.send_mail_with_retries(
-                subject=f"Backup {self.config.backup_title}: {len(diff.altered_files)} files altered (Snapshot: {diff.snapshot_id})",
-                message=message,
-            )
-
-        # Send email for deleted files
-        if diff.deleted_files:
-            self.logger.info(
-                f"Sending email for {len(diff.deleted_files)} deleted files (Snapshot: {diff.snapshot_id})",
-            )
-            deleted_list = "\n".join(
-                str(path) for path in diff.deleted_files[: self.MAX_FILES_IN_EMAIL]
-            )
-            if len(diff.deleted_files) > self.MAX_FILES_IN_EMAIL:
-                deleted_list += f"\n... and {len(diff.deleted_files) - self.MAX_FILES_IN_EMAIL} more files"
-            message = (
-                f"Backup detected {len(diff.deleted_files)} deleted files.\n\n"
-                f"Snapshot ID: {diff.snapshot_id}\n\n"
-                f"Deleted files:\n{deleted_list}"
-            )
-            self.encrypted_mail.send_mail_with_retries(
-                subject=f"Backup {self.config.backup_title}: {len(diff.deleted_files)} files deleted (Snapshot: {diff.snapshot_id})",
-                message=message,
-            )
 
     def _generate_diff_summary(self, snapshot_id: ResticSnapshotId) -> str:
         """Generate diff summary between current and previous snapshot.
@@ -963,22 +385,21 @@ class BackupScript:
             diff_output = self.restic_client.diff(previous_snapshot, snapshot_id)
 
             # Parse diff output to extract deleted, altered, and added files
-            diff = self._parse_diff_output(diff_output, snapshot_id)
+            diff = self.diff_parser.parse(diff_output, snapshot_id)
 
-            self._send_file_changes_email(diff)
+            self.notifier.send_file_changes(diff)
+            self.notifier.send_threshold_warnings(diff)
+            self.notifier.send_monitored_folder_alerts(diff)
 
-            # Check thresholds and send warnings if needed
-            self._check_thresholds_and_send_warnings(diff)
+            return self.diff_parser.extract_statistics(diff_output)
 
-            # Check monitored folders and send alerts if needed
-            self._check_monitored_folders_and_send_alerts(diff)
-
-            return self._extract_diff_statistics(diff_output)
-
-        except (BackupError, ValueError, TypeError, AttributeError) as e:
-            # BackupError covers restic-level failures (ResticCommandFailedError,
-            # ResticBackupFailedError, SnapshotIDNotFoundError, ...). Reporting
-            # problems are non-fatal, so they are logged instead of propagated.
+        except BackupError as e:
+            # BackupError covers the restic-level failures that can legitimately
+            # occur here (ResticCommandFailedError, ResticBackupFailedError,
+            # SnapshotIDNotFoundError, ...). Reporting problems are non-fatal, so
+            # they are logged instead of propagated. Programming errors
+            # (TypeError/AttributeError/...) are intentionally NOT caught so they
+            # surface instead of being masked as a harmless summary string.
             self.logger.warning(f"Failed to generate diff summary: {e}")
             return f"Failed to generate diff summary: {e}"
 
@@ -1040,13 +461,7 @@ class BackupScript:
 
         if self._is_file_found_in_find_output(find_output):
             self.logger.info("Backup verification successful")
-            self.encrypted_mail.send_mail_with_retries(
-                subject=f"Backup {self.config.backup_title} verification successful",
-                message=(
-                    f"Backup verification successful for snapshot {snapshot_id}. "
-                    f"File {self.config.file_to_check} found."
-                ),
-            )
+            self.notifier.send_verification_success(snapshot_id)
             return
 
         self.logger.error(
@@ -1111,27 +526,14 @@ class BackupScript:
                     "Repository check reported problems - skipping prune to "
                     "avoid deleting data from a potentially unhealthy repository",
                 )
-                self.encrypted_mail.send_mail_with_retries(
-                    subject=(
-                        f"Backup maintenance {self.config.backup_title} "
-                        "completed with warnings"
-                    ),
-                    message=(
-                        "Repository check reported problems. Prune was skipped "
-                        "to avoid deleting data from a potentially unhealthy "
-                        f"repository.\n\nCheck output:\n{check_output}"
-                    ),
-                )
+                self.notifier.send_maintenance_warning(check_output)
                 return
 
             # Repo is clean - safe to permanently remove unreferenced data
             self._run_with_lock_retry(self.restic_client.prune, "prune")
 
             self.logger.info("Maintenance completed successfully")
-            self.encrypted_mail.send_mail_with_retries(
-                subject=f"Backup maintenance {self.config.backup_title} successful",
-                message=f"Repository maintenance completed successfully.\n\nCheck output:\n{check_output}",
-            )
+            self.notifier.send_maintenance_success(check_output)
 
         except Exception as e:
             self.logger.exception("Maintenance failed")

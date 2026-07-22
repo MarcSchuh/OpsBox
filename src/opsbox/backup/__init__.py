@@ -2,6 +2,7 @@
 
 from opsbox import __version__
 
+from .backup_notifier import BackupNotifier
 from .config_manager import BackupConfig, ConfigManager
 from .exceptions import (
     BackupEnvironmentError,
@@ -25,12 +26,14 @@ from .network_checker import NetworkChecker
 from .password_manager import PasswordManager
 from .restic_backup import BackupScript
 from .restic_client import ResticClient
+from .restic_diff import ResticDiff, ResticDiffParser
 from .ssh_manager import SSHManager
 
 __all__ = [
     "BackupConfig",
     "BackupEnvironmentError",
     "BackupError",
+    "BackupNotifier",
     "BackupScript",
     "ConfigManager",
     "ConfigurationError",
@@ -45,6 +48,8 @@ __all__ = [
     "ResticBackupFailedError",
     "ResticClient",
     "ResticCommandFailedError",
+    "ResticDiff",
+    "ResticDiffParser",
     "SSHKeyNotFoundError",
     "SSHManager",
     "SnapshotIDNotFoundError",

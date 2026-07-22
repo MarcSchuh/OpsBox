@@ -262,6 +262,7 @@ class TestBackupScript:
             ResticSnapshotId("a1b2c3d4"),
             ResticSnapshotId("c9d0e1f2"),
         ]
+        mock_restic_client.diff.return_value = make_diff_ndjson()
         mock_restic_client.find.return_value = make_find_json()
         mock_restic_client.check.return_value = "no errors were found"
         mock_restic_client.log_file = Path("/tmp/restic.log")
@@ -336,6 +337,7 @@ class TestBackupScript:
             ResticSnapshotId("a1b2c3d4"),
             ResticSnapshotId("c9d0e1f2"),
         ]
+        mock_restic_client.diff.return_value = make_diff_ndjson()
         mock_restic_client.find.return_value = make_find_json()
         mock_restic_client.check.return_value = "no errors were found"
         mock_restic_client.log_file = Path("/tmp/restic.log")
@@ -909,12 +911,13 @@ class TestBackupScript:
         """A log within the budget is attached unchanged."""
         config_file, _, _ = temp_config
         backup_script = self._make_backup_script(config_file, mock_lock_manager)
+        notifier = backup_script.notifier
 
-        small_log = backup_script.temp_dir / "restic_session_small.log"
+        small_log = notifier.temp_dir / "restic_session_small.log"
         small_log.write_text("just a small log\n")
 
-        assert backup_script._prepare_log_attachment(small_log) == str(small_log)
-        assert backup_script._prepare_log_attachment(None) is None
+        assert notifier.prepare_log_attachment(small_log) == str(small_log)
+        assert notifier.prepare_log_attachment(None) is None
 
     def test_prepare_log_attachment_truncates_large_file(
         self,
@@ -924,12 +927,13 @@ class TestBackupScript:
         """An oversized log is truncated to a head+tail excerpt with a header."""
         config_file, _, _ = temp_config
         backup_script = self._make_backup_script(config_file, mock_lock_manager)
+        notifier = backup_script.notifier
 
-        large_log = backup_script.temp_dir / "restic_session_large.log"
+        large_log = notifier.temp_dir / "restic_session_large.log"
         filler = b"x" * (5 * 1024 * 1024)
         large_log.write_bytes(b"HEAD_MARKER\n" + filler + b"\nTAIL_MARKER")
 
-        result = backup_script._prepare_log_attachment(large_log)
+        result = notifier.prepare_log_attachment(large_log)
 
         assert result is not None
         result_path = Path(result)
@@ -938,7 +942,7 @@ class TestBackupScript:
 
         content = result_path.read_bytes()
         # Truncated file must fit under the mail attachment limit
-        assert len(content) <= backup_script.MAX_LOG_ATTACHMENT_BYTES
+        assert len(content) <= notifier.MAX_LOG_ATTACHMENT_BYTES
         text_head = content[:4096].decode("utf-8", errors="replace")
         assert "TRUNCATED LOG" in text_head
         assert "bytes omitted" in content.decode("utf-8", errors="replace")
@@ -947,7 +951,7 @@ class TestBackupScript:
         assert b"HEAD_MARKER" in content
         assert b"TAIL_MARKER" in content
         assert "restic -r" in text_head
-        assert backup_script.config.backup_target in text_head
+        assert notifier.config.backup_target in text_head
 
     def test_check_thresholds_and_send_warnings_deletion(
         self,

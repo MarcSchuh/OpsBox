@@ -9,8 +9,6 @@ from opsbox.backup.exceptions import PasswordIsEmptyError, PasswordRetrievalFail
 class PasswordManager:
     """Handles secure password retrieval and management."""
 
-    MIN_PASSWORD_LENGTH = 8
-
     def __init__(self, logger: logging.Logger) -> None:
         """Initialize the password manager with a logger."""
         self.logger = logger
@@ -79,12 +77,15 @@ class PasswordManager:
                 lookup_2,
             ]
 
+            # check=False so a non-zero exit code is handled explicitly below
+            # (e.g. "no matching secret"). With check=True the returncode branch
+            # would be unreachable dead code.
             result = subprocess.run(  # noqa: S603
                 cmd,
                 capture_output=True,
                 text=True,
                 timeout=30,  # 30 second timeout
-                check=True,
+                check=False,
             )
 
             if result.returncode != 0:
@@ -112,25 +113,3 @@ class PasswordManager:
             error_msg = f"Unexpected error retrieving password: {e}"
             self.logger.exception(error_msg)
             raise PasswordRetrievalFailedError(error_msg) from e
-
-    def validate_password_strength(self, password: str) -> bool:
-        """Validate password strength (basic validation).
-
-        Args:
-            password: Password to validate
-
-        Returns:
-            True if password meets basic strength requirements
-
-        """
-        if not password:
-            return False
-
-        # Basic validation - password should be at least MIN_PASSWORD_LENGTH characters
-        if len(password) < self.MIN_PASSWORD_LENGTH:
-            self.logger.warning(
-                "Password is shorter than recommended minimum length (characters)",
-            )
-            return False
-
-        return True

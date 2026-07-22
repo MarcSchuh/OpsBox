@@ -27,10 +27,6 @@ class WrongOSForResticBackupError(BackupEnvironmentError):
     """Raised when trying to run restic backup on unsupported OS."""
 
 
-class ResticEnvNotSetError(BackupEnvironmentError):
-    """Raised when restic environment is not properly configured."""
-
-
 class EmptySourceError(BackupEnvironmentError):
     """Raised when the backup source is missing or (near) empty.
 
@@ -99,10 +95,6 @@ class VerificationError(BackupError):
 
 class MaintenanceError(BackupError):
     """Raised when maintenance operations fail."""
-
-
-class DiffParsingError(BackupError):
-    """Raised when there are issues parsing the diff output."""
 
 
 class InvalidSnapshotIDError(BackupError):

@@ -155,23 +155,6 @@ class TestPasswordManager:
                     restic_password=None,
                 )
 
-    def test_validate_password_strength_valid(self, password_manager) -> None:
-        """Test that validate_password_strength returns True for valid password length."""
-        assert password_manager.validate_password_strength("valid_password_123") is True
-        assert (
-            password_manager.validate_password_strength("12345678") is True
-        )  # Exactly minimum length
-
-    def test_validate_password_strength_too_short(self, password_manager) -> None:
-        """Test that validate_password_strength returns False for password shorter than minimum."""
-        assert password_manager.validate_password_strength("short") is False
-        assert password_manager.validate_password_strength("") is False
-        password_manager.logger.warning.assert_called()
-
-    def test_validate_password_strength_none(self, password_manager) -> None:
-        """Test that validate_password_strength returns False for None password."""
-        assert password_manager.validate_password_strength(None) is False  # type: ignore[arg-type]
-
     def test_get_restic_password_strips_whitespace(self, password_manager) -> None:
         """Test that retrieved password has whitespace stripped."""
         mock_result = Mock()

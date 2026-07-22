@@ -32,7 +32,7 @@ class MailSettings:
     security: str
     gpg_key_id: str
     default_user: str
-    password: str
+    password: str | None
 
 
 class EncryptedMail:
@@ -160,13 +160,17 @@ class EncryptedMail:
         else:
             password = self.mail_settings.password
 
+        # Retrying is owned by ``send_mail_with_retries`` (which also honors
+        # ``fail_silently`` and applies a delay between attempts). Letting the
+        # SMTP layer retry as well would multiply the attempts (up to
+        # MAX_RETRY_ATTEMPTS squared), so a single SMTP attempt is used here.
         email.smtp(
             host=self.mail_settings.host,
             port=self.mail_settings.port,
             user=self.mail_settings.user,
             password=password,
             security=self.mail_settings.security,
-            attempts=self.MAX_RETRY_ATTEMPTS,
+            attempts=1,
         )
         email.encryption(key=self.mail_settings.gpg_key_id)
         try:

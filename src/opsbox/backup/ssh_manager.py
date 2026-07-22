@@ -17,17 +17,25 @@ class SSHManager:
         self.logger = logger
 
     def get_ssh_auth_sock(self, ssh_user: str) -> str:
-        """Get the SSH auth socket for the specified user."""
+        """Get the SSH auth socket for the specified user.
+
+        The ambient ``SSH_AUTH_SOCK`` environment variable is only trusted when
+        this process actually runs as ``ssh_user``; otherwise it would point at
+        a different user's agent (e.g. root's) and the wrong keyring would be
+        inspected. In all other cases the per-user socket is derived from the
+        target user's uid.
+        """
         try:
             user_info = pwd.getpwnam(ssh_user)
-            return os.getenv(
-                "SSH_AUTH_SOCK",
-                f"/run/user/{user_info.pw_uid}/keyring/ssh",
-            )
         except KeyError as e:
             self.logger.exception(f"User {ssh_user} does not exist.")
             error_msg = f"User {ssh_user} does not exist."
             raise UserDoesNotExistError(error_msg) from e
+
+        default_sock = f"/run/user/{user_info.pw_uid}/keyring/ssh"
+        if os.getuid() == user_info.pw_uid:
+            return os.getenv("SSH_AUTH_SOCK", default_sock)
+        return default_sock
 
     def ensure_ssh_key_loaded(
         self,
@@ -75,7 +83,7 @@ class SSHManager:
         self.logger.error(error_message)
         raise SSHKeyNotFoundError(error_message)
 
-    def _is_key_loaded(self, ssh_key: str, env: dict) -> bool:
+    def _is_key_loaded(self, ssh_key: str, env: dict[str, str]) -> bool:
         """Check if the specified SSH key is loaded in the agent."""
         try:
             result = subprocess.run(
