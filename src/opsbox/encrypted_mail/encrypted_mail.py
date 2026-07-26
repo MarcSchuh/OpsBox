@@ -174,13 +174,27 @@ class EncryptedMail:
         )
         email.encryption(key=self.mail_settings.gpg_key_id)
         try:
-            email.send(sign=False)
-            self.logger.info(
-                f"Email successfully sent to {self.mail_settings.recipient}",
-            )
+            result = email.send(sign=False)
         except Exception:
             self.logger.exception("Error sending email")
             raise
+
+        # ``envelope`` does not raise on SMTP failures: it catches the error,
+        # logs a warning via ``envelope.smtp_handler`` and returns the Envelope
+        # object with a falsy status. Success is only signalled by casting the
+        # returned object to bool, so we must check it explicitly instead of
+        # assuming a completed call means the mail was delivered.
+        if not result:
+            error_msg = (
+                f"Failed to send email to {self.mail_settings.recipient}: "
+                "SMTP server refused the message (see envelope.smtp_handler warning above)"
+            )
+            self.logger.error(error_msg)
+            raise RuntimeError(error_msg)
+
+        self.logger.info(
+            f"Email successfully sent to {self.mail_settings.recipient}",
+        )
 
     def send_mail_with_retries(
         self,

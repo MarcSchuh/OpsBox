@@ -454,6 +454,37 @@ class TestEncryptedMailSendEmail:
 
         encrypted_mail.logger.exception.assert_called_once_with("Error sending email")
 
+    @patch("subprocess.run")
+    @patch("opsbox.encrypted_mail.encrypted_mail.Envelope")
+    def test_send_encrypted_mail_envelope_send_returns_falsy(
+        self,
+        mock_envelope_class,
+        mock_subprocess_run,
+        encrypted_mail,
+    ) -> None:
+        """A refused send (falsy Envelope result) must raise, not report success.
+
+        ``envelope`` does not raise on SMTP failures (e.g. a 421 timeout); it
+        logs a warning and returns an Envelope object whose bool status is
+        False. Previously this was ignored and we logged 'Email successfully
+        sent', so we assert the failure is now surfaced as an exception.
+        """
+        mock_subprocess_run.return_value.returncode = 0
+        mock_subprocess_run.return_value.stdout = "1000\n"
+
+        # Envelope-like object that evaluates to False (send was refused).
+        mock_envelope = Mock()
+        mock_result = Mock()
+        mock_result.__bool__ = Mock(return_value=False)
+        mock_envelope.send.return_value = mock_result
+        mock_envelope_class.return_value = mock_envelope
+
+        with pytest.raises(RuntimeError, match="SMTP server refused"):
+            encrypted_mail.send_encrypted_mail("Test Subject", "Test Message")
+
+        encrypted_mail.logger.exception.assert_not_called()
+        encrypted_mail.logger.error.assert_called_once()
+
 
 class TestEncryptedMailAttachmentHandling:
     """Test cases for attachment handling."""
