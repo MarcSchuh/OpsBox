@@ -193,7 +193,7 @@ class EncryptedMail:
             raise RuntimeError(error_msg)
 
         self.logger.info(
-            f"Email successfully sent to {self.mail_settings.recipient}",
+            f"Email successfully sent to {self.mail_settings.recipient}, with feedback: {result}",
         )
 
     def send_mail_with_retries(
