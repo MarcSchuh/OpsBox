@@ -144,7 +144,7 @@ class ResticClient:
         with self.session_log.open("a", encoding="utf-8") as session_file:
             session_file.write("".join(parts))
 
-    def _resolve_timeout(self, timeout: int | None | object) -> int | None:
+    def _resolve_timeout(self, timeout: int | object | None) -> int | None:
         """Resolve a per-call timeout against the configured default.
 
         When ``timeout`` is the ``_USE_CONFIG_TIMEOUT`` sentinel, the client's
@@ -159,7 +159,7 @@ class ResticClient:
         self,
         command: list[str],
         text: bool = True,
-        timeout: int | None | object = _USE_CONFIG_TIMEOUT,
+        timeout: int | object | None = _USE_CONFIG_TIMEOUT,
         raise_on_error: bool = True,
     ) -> subprocess.CompletedProcess[str]:
         """Execute a command with proper error handling and logging.
@@ -231,7 +231,7 @@ class ResticClient:
     def _run_json_command(
         self,
         command: list[str],
-        timeout: int | None | object = _USE_CONFIG_TIMEOUT,
+        timeout: int | object | None = _USE_CONFIG_TIMEOUT,
     ) -> str:
         """Execute a restic ``--json`` command and return its raw stdout.
 

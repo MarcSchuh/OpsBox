@@ -74,7 +74,7 @@ class RsyncConfig:
     network_host: str | None = None
     rsync_title: str = "Default rsync title"
     rsync_options: dict[str, Any] = field(default_factory=dict)
-    default_user: str = field(default_factory=lambda: getpass.getuser())
+    default_user: str = field(default_factory=getpass.getuser)
     exclude_file: Path | None = None
     log_rotate_on_start: bool = True  # Rotate log file at the start of each run
     log_keep_lines: int = (

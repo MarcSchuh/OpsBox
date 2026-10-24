@@ -7,6 +7,7 @@ import socket
 import types
 from datetime import datetime
 from pathlib import Path
+from typing import Self
 
 from opsbox.encrypted_mail import EncryptedMail
 from opsbox.exceptions import EmailSettingsNotFoundError, LockAlreadyTakenError
@@ -48,7 +49,7 @@ class LockManager:
         self.script_name = script_name
         self._lock_fd: int | None = None
 
-    def __enter__(self) -> "LockManager":
+    def __enter__(self) -> Self:
         """Context manager entry point."""
         self.create_lock()
         return self

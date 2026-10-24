@@ -338,7 +338,7 @@ class HealthMonitor:
             f"  {' '.join(self.config.check_command)}",
             "",
             "Check Output:",
-            check_output if check_output else "(no output)",
+            check_output or "(no output)",
             "",
         ]
 
@@ -378,7 +378,7 @@ class HealthMonitor:
             f"  {' '.join(self.config.check_command)}",
             "",
             "Check Output:",
-            check_output if check_output else "(no output)",
+            check_output or "(no output)",
         ]
 
         message = "\n".join(message_lines)
