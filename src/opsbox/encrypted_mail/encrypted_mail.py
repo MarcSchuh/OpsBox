@@ -367,7 +367,7 @@ def main() -> None:
         log_handler = configure_logging(logging_config)
 
         encrypted_mail = EncryptedMail(log_handler, Path(args.email_settings))
-        attachment = args.attachment if args.attachment else None
+        attachment = args.attachment or None
         encrypted_mail.send_mail_with_retries(args.subject, args.message, attachment)
 
     except EmailSettingsNotFoundError:

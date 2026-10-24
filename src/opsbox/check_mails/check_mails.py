@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from email.header import decode_header
 from pathlib import Path
+from typing import Self
 
 import yaml
 
@@ -99,7 +100,7 @@ class EmailChecker:
         self.imap_folder = config.imap_folder
         self.mail: imaplib.IMAP4_SSL | None = None
 
-    def __enter__(self) -> "EmailChecker":
+    def __enter__(self) -> Self:
         """Context manager entry point."""
         self.connect()
         return self

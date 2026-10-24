@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "opsbox"
-version = "0.7.4"
+version = "0.7.5"
 description = "A comprehensive Python library for server operations including backup scripts, encrypted mail functionality, and utility tools"
 readme = "README.md"
 license = {text = "MIT"}
@@ -72,6 +72,7 @@ ignore = [
     "D415",
     "FBT001",  # Boolean-typed positional argument in function definition
     "FBT002",  # Boolean default positional argument in function definition
+    "CPY001",
 ]
 
 [tool.ruff.format]
@@ -141,5 +142,6 @@ dev = [
     "pre-commit>=4.5.0",
     "pyinstaller>=6.14.2",
     "pytest-cov>=7.0.0",
+    "ruff>=0.17.2",
     "types-PyYAML>=6.0.0",
 ]
