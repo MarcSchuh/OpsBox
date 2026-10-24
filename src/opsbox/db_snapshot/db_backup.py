@@ -22,7 +22,7 @@ from opsbox.logging import LoggingConfig, configure_logging
 class DBBackup:
     """Handles database backup, cleanup, and notification."""
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         backup_dir: Path,
         container_name: str,
