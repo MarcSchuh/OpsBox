@@ -108,6 +108,68 @@ jobs:
             echo "✅ $exe: $(du -h dist/$exe | cut -f1)"
           done
 
+      - name: Package as .deb
+        run: |
+          curl -fsSL https://github.com/goreleaser/nfpm/releases/download/v2.48.0/nfpm_2.48.0_Linux_x86_64.tar.gz | tar -xz nfpm
+          ./nfpm package -f nfpm.yaml -v "${{ steps.get-version.outputs.version }}" -p deb -t dist/
+          rm nfpm
+          ls -lh dist/*.deb
+
+      - name: Publish APT repository
+        env:
+          APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${APT_GPG_PRIVATE_KEY}" ]; then
+            echo "::error::Repository secret APT_GPG_PRIVATE_KEY is not set. Add it (armored GPG private key of the APT repo signing key), then re-run."
+            exit 1
+          fi
+
+          sudo apt-get install -y -qq apt-utils
+          export GNUPGHOME="$(mktemp -d)"
+          echo "${APT_GPG_PRIVATE_KEY}" | gpg --batch --import
+          gpg --armor --export > KEY.asc
+
+          REPO_URL="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git"
+          if ! git clone --single-branch --branch gh-pages "${REPO_URL}" apt-repo; then
+            mkdir apt-repo
+            cd apt-repo
+            git init -b gh-pages
+            git remote add origin "${REPO_URL}"
+          fi
+
+          cd apt-repo
+          touch .nojekyll
+          mkdir -p pool/main/o/opsbox dists/stable/main/binary-amd64
+          cp ../dist/opsbox_*_amd64.deb pool/main/o/opsbox/
+
+          apt-ftparchive packages pool > dists/stable/main/binary-amd64/Packages
+          gzip -k -9 -f dists/stable/main/binary-amd64/Packages
+
+          cd dists/stable
+          apt-ftparchive \
+            -o APT::FTPArchive::Release::Origin="OpsBox" \
+            -o APT::FTPArchive::Release::Suite="stable" \
+            -o APT::FTPArchive::Release::Codename="stable" \
+            -o APT::FTPArchive::Release::Architectures="amd64" \
+            -o APT::FTPArchive::Release::Components="main" \
+            -o APT::FTPArchive::Release::Description="OpsBox APT Repository" \
+            release . > Release
+          gpg --batch --yes --clearsign --output InRelease Release
+          gpg --batch --yes --armor --detach-sign --output Release.gpg Release
+
+          cd ../..
+          mv ../KEY.asc .
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --staged --quiet; then
+            echo "No repository changes to publish"
+          else
+            git commit -m "Release opsbox ${{ steps.get-version.outputs.version }}"
+            git push origin gh-pages
+          fi
+
       - name: Create release tag if it doesn't exist
         id: create-tag
         run: |
@@ -161,5 +223,6 @@ jobs:
             dist/rsync_manager
             dist/health_monitor
             dist/kvm_snapshot_manager
+            dist/opsbox_*_amd64.deb
           draft: false
           prerelease: false

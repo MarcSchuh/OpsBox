@@ -1,0 +1,14 @@
+[Unit]
+Description=OpsBox health monitor
+Documentation=https://github.com/MarcSchuh/OpsBox
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/opsbox-health-monitor --config /etc/opsbox/health_monitor/config.yaml
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
