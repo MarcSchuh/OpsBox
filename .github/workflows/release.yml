@@ -111,8 +111,9 @@ jobs:
       - name: Package as .deb
         run: |
           curl -fsSL https://github.com/goreleaser/nfpm/releases/download/v2.48.0/nfpm_2.48.0_Linux_x86_64.tar.gz | tar -xz nfpm
-          ./nfpm package -f nfpm.yaml -v "${{ steps.get-version.outputs.version }}" -p deb -t dist/
-          rm nfpm
+          sed "s/^version: .*/version: ${{ steps.get-version.outputs.version }}/" nfpm.yaml > dist/nfpm-run.yaml
+          ./nfpm package -f dist/nfpm-run.yaml -p deb -t dist/
+          rm nfpm dist/nfpm-run.yaml
           ls -lh dist/*.deb
 
       - name: Publish APT repository
