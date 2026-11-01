@@ -1,0 +1,40 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+Architectures: amd64
+Codename: stable
+Components: main
+Date: Sun, 01 Nov 2026 22:08:24 +0000
+Description: OpsBox APT Repository
+Origin: OpsBox
+Suite: stable
+MD5Sum:
+ 80121b94119275f6c2902d1779376ce9              157 Release
+ 0630bfb5080b6c8d29ba760ac1660e2d              742 main/binary-amd64/Packages
+ aa1868fc31349c18beaed0b2a98a2db2              530 main/binary-amd64/Packages.gz
+SHA1:
+ ea86e4832c63f6484f95942a7771b7a44281e05e              157 Release
+ 63733a5f9e00c130229068e0c147bb6bbd0e46d9              742 main/binary-amd64/Packages
+ 75734d7b20053d077d426bd487781304a50f2ad0              530 main/binary-amd64/Packages.gz
+SHA256:
+ 157afff94670b5b7366e006471bc72624c8e23e8884ded5173d1bdb1f9c94964              157 Release
+ 4f789fc4046f81123061e64d9b5f9e7b81df444834b87386713168cd098d687e              742 main/binary-amd64/Packages
+ 2055822837fedda7674dfc95df6dcb07b0665c9038960e33fadce01890678af5              530 main/binary-amd64/Packages.gz
+SHA512:
+ fc5ee16d033ab50235d87a3d4b01e75af9d52d04d732bffc79513575362f43bf06c8aaa2cefa5f086b05ec365db99b402e6e6a42c205948552796f1622a2c85d              157 Release
+ a2d515bf215179fdaa33ccf70be4536cbf6469137aa1f6522272aab19ee0cd36ce41e414e81548f42fc91a5ecd30ea120877981f4f144b5058a6b8baeff77358              742 main/binary-amd64/Packages
+ bb3d8d8f31ec3cfff604f66059c721d7e17622ace51304ae056302869623efdbd5fcaa2c8375d059d1f0684c3677d4795cce10d8b43db67ea1e2167f5e31e3b4              530 main/binary-amd64/Packages.gz
+-----BEGIN PGP SIGNATURE-----
+
+iQGzBAEBCgAdFiEEb0yJQ7Hv9BQHcRh2d3X5zCwM5vwFAmrnuFgACgkQd3X5zCwM
+5vwfiAwArKoeIrmyKEg+K8SK2oeEMcai0FemsWwo5C/r3tbDcsHoyfLX7EW/iOL7
+eeK8ORFe4BB8ctc66jsqYD49bHc11jQ+Wk6kUgOvVAnLDn8goCLOZXXHeP7DH2zD
+v5pENKkpI7y+QGt7u1g7L8RZNCm6C7w/9NVVz8DzeMQzGuOoCQn889EXtNCF40in
+O6E/JN5sFtt581ThWK0p8+tKG6RR5PY4OpxEozfZkhBHRMTvJyiqxEpbqXe8YDu2
+hVQpBp6VcAZOlmLg37fsmWyej5mfCjrlwtHjYfTzN+em6fEbZqHa/4I1TAX7mCpS
+hqxY2gFsn/rIa/qeq8P9OC18I3NkjrQR1zY6xK4tKs09G5kXeqI2kN9m1ed0phnM
+AkkEaY2OHS+Wuw7P+locLsLFlvjCAaX0kGrDSmxfKu7nofF7/f8knMMl52JupHLS
+v3rRkjOS6r3F3jtEWwGd4W7/y+3ed7Jy5bbnqvpgJJJNMz5vjeuGCeJMyIIxlAzc
+rbyVLL0q
+=wOkX
+-----END PGP SIGNATURE-----

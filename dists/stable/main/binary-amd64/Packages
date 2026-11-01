@@ -1,0 +1,17 @@
+Package: opsbox
+Architecture: amd64
+Version: 0.7.8
+Priority: optional
+Section: utils
+Maintainer: MarcSchuh <MarcSchuh@users.noreply.github.com>
+Installed-Size: 80693
+Filename: pool/main/o/opsbox/opsbox_0.7.8_amd64.deb
+Size: 81639632
+MD5sum: d587e1d01ff2f1a38931491f5949195e
+SHA1: 3dcf5550ecbea881ed2caa07511fa0a8db3d8e46
+SHA256: bdb8809c11c7f5bf6668f38d1bf1ac945f8c9f49048a308c3e75283deefa2d0e
+SHA512: 193bc0b4ed3d49ba184cb2e79353a4a7c8342065a386e0aac78a391fa1251afa3928d2bc80939291375d693a8588eb4b55b6999a129bfc4af0f90a0699db6bc7
+Description: Collection of server administration tools: notification utility, mail
+ checking, database backups, encrypted mail, restic backups, rsync
+ management, health monitoring and KVM snapshot management.
+
