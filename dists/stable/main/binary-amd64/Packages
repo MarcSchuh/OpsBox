@@ -4,13 +4,13 @@ Version: 0.7.8
 Priority: optional
 Section: utils
 Maintainer: MarcSchuh <MarcSchuh@users.noreply.github.com>
-Installed-Size: 80693
+Installed-Size: 80687
 Filename: pool/main/o/opsbox/opsbox_0.7.8_amd64.deb
-Size: 81639632
-MD5sum: d587e1d01ff2f1a38931491f5949195e
-SHA1: 3dcf5550ecbea881ed2caa07511fa0a8db3d8e46
-SHA256: bdb8809c11c7f5bf6668f38d1bf1ac945f8c9f49048a308c3e75283deefa2d0e
-SHA512: 193bc0b4ed3d49ba184cb2e79353a4a7c8342065a386e0aac78a391fa1251afa3928d2bc80939291375d693a8588eb4b55b6999a129bfc4af0f90a0699db6bc7
+Size: 81636692
+MD5sum: 00f7adef95a01254a36a34a271864f79
+SHA1: b8f80af33d283459108e9a7cc7f5540cc520cbcc
+SHA256: 38c75f19c32e7693acd92cbe134b70ca2c1f7f2eb3b0f1b123e93ff0de92dbf0
+SHA512: aaf207f8ef46cc59e2c45dae394e47fb244dcd84304f559adfb319e7c973d5da41dc83037048c12d8e5b4548d438e32a68637d7a23f99a12416ec1b76fab0b29
 Description: Collection of server administration tools: notification utility, mail
  checking, database backups, encrypted mail, restic backups, rsync
  management, health monitoring and KVM snapshot management.
