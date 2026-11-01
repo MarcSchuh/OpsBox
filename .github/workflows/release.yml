@@ -51,12 +51,38 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra dev
 
-      - name: Extract version from pyproject.toml
+      - name: Determine version (bump patch on dependency updates)
         id: get-version
         run: |
-          VERSION=$(grep -E '^version\s*=' pyproject.toml | sed -E 's/version\s*=\s*"([^"]+)"/\1/')
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Extracted version: $VERSION"
+          LOCK_CHANGED=false
+          if [ "${{ github.event_name }}" = "push" ] && git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" -- uv.lock | grep -q .; then
+            LOCK_CHANGED=true
+          fi
+
+          extract_version() {
+            grep -E '^version\s*=' "$1" | head -1 | sed -E 's/version\s*=\s*"([^"]+)"/\1/'
+          }
+
+          VERSION="$(extract_version pyproject.toml)"
+          echo "pyproject.toml version: ${VERSION}"
+
+          if [ "${LOCK_CHANGED}" = "true" ] && git rev-parse "v${VERSION}" >/dev/null 2>&1; then
+            IFS='.' read -r MAJ MIN PAT <<< "${VERSION}"
+            NEW_VERSION="${MAJ}.${MIN}.$((PAT + 1))"
+            sed -i -E "0,/^version\s*=\s*\"[^\"]+\"/s//version = \"${NEW_VERSION}\"/" pyproject.toml
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add pyproject.toml
+            git commit -m "Version bump to ${NEW_VERSION}"
+            git push
+            VERSION="${NEW_VERSION}"
+            echo "Dependency update merged and version already released, bumped to ${NEW_VERSION}"
+          else
+            echo "No version bump needed (lock changed: ${LOCK_CHANGED}, tag exists: $(git rev-parse "v${VERSION}" >/dev/null 2>&1 && echo yes || echo no))"
+          fi
+
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Releasing version: ${VERSION}"
 
       - name: Build all executables
         run: |
