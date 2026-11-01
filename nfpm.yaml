@@ -13,28 +13,36 @@ license: Apache-2.0
 contents:
   - src: dist/notifier
     dst: /usr/bin/opsbox-notifier
-    mode: 0755
+    file_info:
+      mode: 0755
   - src: dist/check_mails
     dst: /usr/bin/opsbox-check-mails
-    mode: 0755
+    file_info:
+      mode: 0755
   - src: dist/db_backup
     dst: /usr/bin/opsbox-db-backup
-    mode: 0755
+    file_info:
+      mode: 0755
   - src: dist/encrypted_mail
     dst: /usr/bin/opsbox-encrypted-mail
-    mode: 0755
+    file_info:
+      mode: 0755
   - src: dist/restic_backup
     dst: /usr/bin/opsbox-restic-backup
-    mode: 0755
+    file_info:
+      mode: 0755
   - src: dist/rsync_manager
     dst: /usr/bin/opsbox-rsync-manager
-    mode: 0755
+    file_info:
+      mode: 0755
   - src: dist/health_monitor
     dst: /usr/bin/opsbox-health-monitor
-    mode: 0755
+    file_info:
+      mode: 0755
   - src: dist/kvm_snapshot_manager
     dst: /usr/bin/opsbox-kvm-snapshot-manager
-    mode: 0755
+    file_info:
+      mode: 0755
   - src: src/opsbox/backup/config.example.yaml
     dst: /etc/opsbox/backup/config.example.yaml
   - src: src/opsbox/check_mails/config.example.yaml
