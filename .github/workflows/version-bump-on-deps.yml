@@ -1,18 +1,16 @@
 name: Version Bump on Dependabot PRs
 
-# Automatically bumps the PATCH version in pyproject.toml on pull requests
-# opened by Dependabot, and pushes the change back into the PR branch.
+# Automatically bumps the PATCH version in pyproject.toml on the dependency
+# update PR, and pushes the change back into the PR branch.
 #
-# Why this works without a PAT:
-#   Dependabot-triggered `pull_request` runs get a read-only GITHUB_TOKEN by
-#   default. Declaring `permissions: contents: write` elevates it so the push
-#   to the PR branch (which lives in this repo, not a fork) succeeds. Commits
-#   made with GITHUB_TOKEN do not re-trigger workflows, so there is no loop.
-#   `pull_request_target` is intentionally avoided: for Dependabot it yields a
-#   read-only token and would checkout untrusted head code with a write token.
-#
-# Note: adding this commit means Dependabot stops auto-rebasing the PR, since a
-# foreign commit is now on the branch. That is fine for a version bump.
+# The PR is created by dependency-updater.yml with DEPS_PR_TOKEN (a PAT).
+# Because of that, these pull_request runs no longer require maintainer
+# approval and get a normal GITHUB_TOKEN with the permissions declared
+# below. Commits pushed with GITHUB_TOKEN do not re-trigger workflows,
+# so there is no loop. `pull_request_target` is intentionally avoided.
+# If DEPS_PR_TOKEN is not configured, the update PR falls back to being
+# created with GITHUB_TOKEN by github-actions[bot], whose actor never
+# matches here.
 
 on:
   pull_request:
@@ -23,8 +21,8 @@ permissions:
 
 jobs:
   bump-version:
-    # Only run for PRs opened by Dependabot.
-    if: github.actor == 'dependabot[bot]'
+    # Only run for the dependency update PR branch.
+    if: github.head_ref == 'dependabot/update-dependencies'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout PR branch
