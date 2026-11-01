@@ -1,0 +1,51 @@
+name: opsbox
+arch: amd64
+platform: linux
+version: 0.0.0
+section: utils
+priority: optional
+maintainer: MarcSchuh <MarcSchuh@users.noreply.github.com>
+description: |
+  Collection of server administration tools: notification utility, mail
+  checking, database backups, encrypted mail, restic backups, rsync
+  management, health monitoring and KVM snapshot management.
+license: Apache-2.0
+contents:
+  - src: dist/notifier
+    dst: /usr/bin/opsbox-notifier
+    mode: 0755
+  - src: dist/check_mails
+    dst: /usr/bin/opsbox-check-mails
+    mode: 0755
+  - src: dist/db_backup
+    dst: /usr/bin/opsbox-db-backup
+    mode: 0755
+  - src: dist/encrypted_mail
+    dst: /usr/bin/opsbox-encrypted-mail
+    mode: 0755
+  - src: dist/restic_backup
+    dst: /usr/bin/opsbox-restic-backup
+    mode: 0755
+  - src: dist/rsync_manager
+    dst: /usr/bin/opsbox-rsync-manager
+    mode: 0755
+  - src: dist/health_monitor
+    dst: /usr/bin/opsbox-health-monitor
+    mode: 0755
+  - src: dist/kvm_snapshot_manager
+    dst: /usr/bin/opsbox-kvm-snapshot-manager
+    mode: 0755
+  - src: src/opsbox/backup/config.example.yaml
+    dst: /etc/opsbox/backup/config.example.yaml
+  - src: src/opsbox/check_mails/config.example.yaml
+    dst: /etc/opsbox/check_mails/config.example.yaml
+  - src: src/opsbox/db_snapshot/env.example
+    dst: /etc/opsbox/db_snapshot/env.example
+  - src: src/opsbox/encrypted_mail/email_settings.example.yaml
+    dst: /etc/opsbox/encrypted_mail/email_settings.example.yaml
+  - src: src/opsbox/health_monitor/config.example.yaml
+    dst: /etc/opsbox/health_monitor/config.example.yaml
+  - src: src/opsbox/rsync/config.example.yaml
+    dst: /etc/opsbox/rsync/config.example.yaml
+  - src: packaging/opsbox-health-monitor.service
+    dst: /lib/systemd/system/opsbox-health-monitor.service
