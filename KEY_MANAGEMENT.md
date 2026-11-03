@@ -54,6 +54,9 @@ Generate a single, dedicated, signing-only key:
 gpg --quick-generate-key "OpsBox APT Repository <you@example.com>" ed25519 sign never
 ```
 
+Choose a **passphrase** when prompted — the key should be passphrase-protected
+so that a leaked key blob alone is useless.
+
 A more elaborate setup is possible — an offline certification-only master
 key with a separate, expiring signing subkey, so the master key never enters
 CI. That is deliberately **not** done here to keep the procedure simple; the
@@ -61,11 +64,9 @@ key is dedicated to this repository alone, which limits the blast radius.
 
 ### 2. Export the private key for CI
 
-> ⚠️ **Compatibility note:** the current release workflow signs with
-> `gpg --batch` without a passphrase. The exported key must therefore be
-> **unprotected**. Do not add a passphrase yet — see
-> [hardening](#hardening-options-not-yet-implemented) for the workflow changes
-> a passphrase would require.
+The export keeps the key's passphrase protection — that is intended. The
+release workflow unlocks the key in CI using the passphrase from a second
+secret (see the next step).
 
 ```bash
 gpg --export-secret-keys --armor <FINGERPRINT>! > opsbox-apt-signing-key.asc
@@ -81,16 +82,18 @@ gpg --fingerprint <FINGERPRINT>
 Note the fingerprint — it must be documented in `opsbox-server-setup.sh`
 (see the [rotation procedure](#rotating-the-signing-key)).
 
-### 4. Upload the secret to GitHub
+### 4. Upload the secrets to GitHub
 
-From your trusted machine with `gh` authenticated as a repository admin:
+From your trusted machine with `gh` authenticated as a repository admin, set
+the private key and — in a second secret — its passphrase:
 
 ```bash
 gh secret set APT_GPG_PRIVATE_KEY -R MarcSchuh/OpsBox < opsbox-apt-signing-key.asc
+gh secret set APT_GPG_PASSPHRASE -R MarcSchuh/OpsBox   # prompts for the passphrase
 ```
 
-> The repo secret is readable by every workflow in this repository. That is
-> acceptable for a dedicated, revocable, signing-only key. Moving the secret
+> The repo secrets are readable by every workflow in this repository. That is
+> acceptable for a dedicated, revocable, signing-only key. Moving the secrets
 > into a protected GitHub *environment* is listed under
 > [hardening](#hardening-options-not-yet-implemented).
 
@@ -127,7 +130,8 @@ Use this procedure to replace the current (or a leaked) key.
 
 1. **Create a clean key** as described in [creating a clean signing
    key](#creating-a-clean-signing-key) — steps 1–3.
-2. **Overwrite the secret** with the new key material (step 4) and trigger a
+2. **Overwrite the secrets** with the new key material and passphrase (step 4)
+   and trigger a
    release. The workflow automatically publishes the new key as `KEY.asc` and
    re-signs `InRelease`/`Release.gpg` with it.
 3. **Bridge the transition for existing servers.** Each release overwrites
@@ -185,10 +189,10 @@ These changes improve the setup further but require workflow changes:
   `main`) and add `environment: release` to the publish job in
   `.github/workflows/release.yml`. This limits which workflows can read the
   secret.
-- **Passphrase-protected key:** export the key with a passphrase and store it
-  in a second secret (e.g. `APT_GPG_PASSPHRASE`). The workflow must then
-  import and sign with `--pinentry-mode loopback --passphrase
-  "$APT_GPG_PASSPHRASE"`. A leaked key blob alone is then useless.
+- **Passphrase-protected key: ✅ implemented.** The workflow signs with
+  `--pinentry-mode loopback --passphrase` when the `APT_GPG_PASSPHRASE`
+  secret is set; a leaked key blob alone is useless. Keys without a passphrase
+  remain supported for backward compatibility.
 - **Key overlap by design:** adjust the `Publish APT repository` step to merge
   the freshly exported key into the existing `KEY.asc` instead of
   overwriting it, making rotations seamless for existing servers.
