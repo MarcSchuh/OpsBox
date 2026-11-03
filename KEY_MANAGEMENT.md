@@ -48,25 +48,16 @@ Ed448 — everything else produces warnings/errors since apt 2.7.13 / Ubuntu
 needed as a fallback for clients older than ~2017 (GnuPG < 2.1), which this
 repository does not support.
 
-Simple variant — a single, dedicated, signing-only key:
+Generate a single, dedicated, signing-only key:
 
 ```bash
 gpg --quick-generate-key "OpsBox APT Repository <you@example.com>" ed25519 sign never
 ```
 
-Best-practice variant — an offline master (certification-only) key with a
-separate signing subkey, so the master key never leaves your machine and only
-the subkey enters CI:
-
-```bash
-gpg --quick-generate-key "OpsBox APT Repository <you@example.com>" ed25519 cert never
-gpg --quick-add-key <MASTER-FINGERPRINT> ed25519 sign 2y
-```
-
-Using a subkey with a finite expiry forces a planned rotation every two years.
-For an automated pipeline you may prefer `never` and rotate on demand — both
-are acceptable; the important part is that the key is dedicated to this
-repository.
+A more elaborate setup is possible — an offline certification-only master
+key with a separate, expiring signing subkey, so the master key never enters
+CI. That is deliberately **not** done here to keep the procedure simple; the
+key is dedicated to this repository alone, which limits the blast radius.
 
 ### 2. Export the private key for CI
 
@@ -77,11 +68,7 @@ repository.
 > a passphrase would require.
 
 ```bash
-# Simple variant:
 gpg --export-secret-keys --armor <FINGERPRINT>! > opsbox-apt-signing-key.asc
-
-# Best-practice variant (exports only the subkey, not the master key):
-gpg --export-secret-subkeys --armor <SUBKEY-FINGERPRINT>! > opsbox-apt-signing-key.asc
 ```
 
 ### 3. Store the public key and fingerprint for reference
