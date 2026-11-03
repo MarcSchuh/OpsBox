@@ -30,10 +30,13 @@ Every release is published to a GPG-signed APT repository hosted on GitHub Pages
 ```bash
 sudo mkdir -p /etc/apt/keyrings
 curl -fsSL https://marcschuh.github.io/OpsBox/KEY.asc | sudo gpg --dearmor -o /etc/apt/keyrings/opsbox.gpg
-echo "deb [signed-by=/etc/apt/keyrings/opsbox.gpg] https://marcschuh.github.io/OpsBox/ stable main" | sudo tee /etc/apt/sources.list.d/opsbox.list
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/opsbox.gpg] https://marcschuh.github.io/OpsBox stable main" | sudo tee /etc/apt/sources.list.d/opsbox.list
 sudo apt update
 sudo apt install opsbox
 ```
+
+The `arch=amd64` restriction prevents "doesn't support architecture 'i386'"
+notes on multi-arch systems (e.g. with Steam/Wine installed).
 
 The package installs all executables as `opsbox-<tool>` in `/usr/bin`, example
 configurations under `/etc/opsbox/`, and a systemd unit template
