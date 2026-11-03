@@ -254,6 +254,9 @@ CI runs three jobs on every PR: code quality (ruff, mypy), tests (pytest +
 coverage), and security (bandit, pip-audit). See [CI_CD_SETUP.md](CI_CD_SETUP.md)
 for details on the pipeline and recommended branch protection settings.
 
+For maintainers: the GPG signing key for the APT repository is managed as
+described in [KEY_MANAGEMENT.md](KEY_MANAGEMENT.md).
+
 ## License
 
 [Apache License 2.0](LICENSE)
