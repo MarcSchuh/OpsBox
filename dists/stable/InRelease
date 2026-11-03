@@ -4,37 +4,37 @@ Hash: SHA512
 Architectures: amd64
 Codename: stable
 Components: main
-Date: Tue, 03 Nov 2026 20:09:46 +0000
+Date: Tue, 03 Nov 2026 20:10:58 +0000
 Description: OpsBox APT Repository
 Origin: OpsBox
 Suite: stable
 MD5Sum:
- 8395aa97f9200de7be43d253ceba37e6              157 Release
- 3b4330765fd65f29fd993298ad412a28              742 main/binary-amd64/Packages
- caff3e9de8dec585ba63458389545718              529 main/binary-amd64/Packages.gz
+ ae213dc59f202444b0a1bfeceddee46e              157 Release
+ 2ad80dc685df27bd13a31ec469a283ba              742 main/binary-amd64/Packages
+ b54dcfc63c8772160dfd48dc0ced6ce7              530 main/binary-amd64/Packages.gz
 SHA1:
- b9e64660982979a2daffff9bc163c03ba2a370be              157 Release
- fd2de1fea983ff45655c7bace6cecbe197111574              742 main/binary-amd64/Packages
- bbf92690ff0d4da70e73cc181d08317694d515b1              529 main/binary-amd64/Packages.gz
+ 101b6a0089d10d20b9c3735f955d3ec8c7915b78              157 Release
+ 3a014db41248e5562a9a246e3f3c95e5aad8b04a              742 main/binary-amd64/Packages
+ 719d8aacf6a3f9cba740093ad9dcbb53842fda65              530 main/binary-amd64/Packages.gz
 SHA256:
- 0124269caaba3a6574f6fe754da3f633f04d2fadadfb0263f3d43d5102d437e1              157 Release
- dce2f41ef14ee9f504f8ea87751f40fab99503dbe6b85418bf7c178260b33ef0              742 main/binary-amd64/Packages
- b7ebdad52e14d48125669d9ec05043c659a29352e72594fc778756424f6351ba              529 main/binary-amd64/Packages.gz
+ 717f42c3841f179e696b8b49bb978e3dffeb8b46ab9f4636aa637e9aa62462b2              157 Release
+ 7c462a884ad316c8159c25f21a2a7deb07f77d70be319c146fd5d636f6efc6e8              742 main/binary-amd64/Packages
+ ef0271e8171c764e944d834bbefe91df48eb6023aa38fe4d052dbf6ab0e0a12e              530 main/binary-amd64/Packages.gz
 SHA512:
- 15eb872c53a461dde34a4400ed3c301fd8d321281036aeb3774332585bd371a6b56e1e28f93ec00873af7c4225a0f37cf498f36e7ec48a1ed4ced8fa23e6e270              157 Release
- 04a82a858a5eee32e2a6cf9c5b523ef983d5d2c81b422d9e3b5535f01bc08f1f6058551bae37cb61f09aa8c4e992c3c5357c3b529ea5bb9d7bb291fa6b50c2d5              742 main/binary-amd64/Packages
- e60e230e9458e16850effa47ffa91c161a8ed253d62190f395ee1cb84e5e8f1765509e5d3c2bf6990c8f42889ce08425c89a7b048f1d4950210997e4d24300e5              529 main/binary-amd64/Packages.gz
+ 57e7223d14a6569d11a20eecf9dbdc077474bc83998eb36cd5854c723a714e1f11fff1ac0b9b6df29c636efc3057a0871e32d667a0cbfa9f985494628d14e69e              157 Release
+ 770d7f8b1ed4fa2075539a75570807bc0db78f246c0984a7688561cefb37f4fddbc16d81b61ed6108024d041e11c48daa49569a064468eacafd6849bed931651              742 main/binary-amd64/Packages
+ 0bea026e75de1603ee8ba46ae0d1e636242903169124173e3070ed07557bae23c3463c77622f7d3e17c904499fffa027b474c7c56dcc83be95947c8a3bd739d1              530 main/binary-amd64/Packages.gz
 -----BEGIN PGP SIGNATURE-----
 
-iQGzBAEBCgAdFiEEb0yJQ7Hv9BQHcRh2d3X5zCwM5vwFAmrqP4oACgkQd3X5zCwM
-5vwLEAv8CaChq6Ncyl78vovXi1kpAqH4lGTwpppge47/GNfrsQnyy4BG32stc6UN
-5fKb9tWJze2oymIBnSSVSj5lKYEYmPtFcgIY0dUsAiC6pMShEOwc+NOO6vtdh3DK
-cHcFUB89yKxlACRxNoM/D82JnZcPYEyKAhggD8yChYehqYgtSe0hTEmhZwXj1/f8
-ezPtS8xeTZdWKZoHExwK2JcbuTKEwGcdV4DrrHajWealVWYPGQ8HeKe90QgnPrxs
-KaWTzOoRGgfG1mc5cfwR35DKbEjuxjA+7jCNYsiFsIU52ARAhSu0jHHud6fq8lFB
-27l++szJ7o9cHHMy9PdONaCWCpR1ao/tkkF6CqUwGzoWTeTq7xEvouBFLACxkZl6
-doX8HIMNzhvvZlrMoOiAFtcyv8Xy9xz/egCh3+0sxK9+jxdbZqPypsjG/bI85NGf
-XqkdoFnLub1gaZvPxUjyiUH/Ca7179w4/bgBS41iTTnbY7m+q5EpbFTGyxm2A9CE
-FIjDK5SX
-=RLRl
+iQGzBAEBCgAdFiEEb0yJQ7Hv9BQHcRh2d3X5zCwM5vwFAmrqP9IACgkQd3X5zCwM
+5vxKQwwAtO0i77i25PKqfcV2VzUsmpJ1tet1hYKT8QwvbnMk00iqBrFZ+iPVJmKk
+MplLOYb3QKiZZhUw37thOdy/jqKs+46VwwxtiAdk5bapl7KUqBDUjoi3leaq4BK4
+MWZse/lZgDqAurQiVYxt0Cm4hVvNYb7L65oohHE3dcCMLppv6b0rub1tP7Mee2Yy
+Kl+D+Ix9SZizR1BEPc6mJiQbPflKS/xt712W5M8V+y+UiHOLgVcQ8WZaFGM8WILF
+fNXY5sMmrzR6v51i2qGKBYv9YP8VXJHGHuuIGjAVJq3V2IOhp+KOa1H8r+d92zXH
+4TJUmNObb7d/HNH/TQe7dgY+dLR0taZ5xbkqfArH3yvGNRgVWktj0sjo0vjFWmK8
+vqY3evOeBOJ5DewgA3SSbG++1xB2L2McdHpqgBvVs6aRvId1OfXUBbjCuoVO+5/1
+m2cXdB5h6xhxT9WhlHNzlmhZSmjxCBl3ymxbYLtmUV23oSX5lTWuNIkrMMd0fbZF
+GXsqChtB
+=4JSe
 -----END PGP SIGNATURE-----
