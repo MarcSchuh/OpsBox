@@ -7,7 +7,7 @@ name = "opsbox"
 version = "0.7.8"
 description = "A comprehensive Python library for server operations including backup scripts, encrypted mail functionality, and utility tools"
 readme = "README.md"
-license = {text = "MIT"}
+license = {text = "Apache-2.0"}
 requires-python = ">=3.12"
 authors = [
     {name = "OpsBox Team", email = "opsbox@example.com"},
@@ -16,7 +16,7 @@ keywords = ["server", "operations", "backup", "encryption", "mail", "utilities"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: System Administrators",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
