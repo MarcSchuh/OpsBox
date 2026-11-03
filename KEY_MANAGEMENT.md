@@ -41,10 +41,17 @@ server.
 
 ### 1. Generate the key
 
+The key algorithm should be **Ed25519**. It is one of the three algorithms
+modern apt explicitly supports for repository signing (RSA ≥ 2048, Ed25519,
+Ed448 — everything else produces warnings/errors since apt 2.7.13 / Ubuntu
+24.04), and it produces smaller, faster signatures than RSA. RSA 4096 is only
+needed as a fallback for clients older than ~2017 (GnuPG < 2.1), which this
+repository does not support.
+
 Simple variant — a single, dedicated, signing-only key:
 
 ```bash
-gpg --quick-generate-key "OpsBox APT Repository <you@example.com>" rsa4096 sign never
+gpg --quick-generate-key "OpsBox APT Repository <you@example.com>" ed25519 sign never
 ```
 
 Best-practice variant — an offline master (certification-only) key with a
@@ -52,8 +59,8 @@ separate signing subkey, so the master key never leaves your machine and only
 the subkey enters CI:
 
 ```bash
-gpg --quick-generate-key "OpsBox APT Repository <you@example.com>" default cert never
-gpg --quick-add-key <MASTER-FINGERPRINT> rsa4096 sign 2y
+gpg --quick-generate-key "OpsBox APT Repository <you@example.com>" ed25519 cert never
+gpg --quick-add-key <MASTER-FINGERPRINT> ed25519 sign 2y
 ```
 
 Using a subkey with a finite expiry forces a planned rotation every two years.
