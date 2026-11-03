@@ -4,37 +4,30 @@ Hash: SHA512
 Architectures: amd64
 Codename: stable
 Components: main
-Date: Tue, 03 Nov 2026 20:19:05 +0000
+Date: Tue, 03 Nov 2026 20:53:03 +0000
 Description: OpsBox APT Repository
 Origin: OpsBox
 Suite: stable
 MD5Sum:
- 55a05d6034dba72bc6f86d65f2157b88              157 Release
- 2a8c67b1335a2102383fd1df7bff9087             1484 main/binary-amd64/Packages
- cf1040b93dddf78f58279a072e1ada1b              728 main/binary-amd64/Packages.gz
+ f711320e3b6b91d7c0476e7b2e62352a              157 Release
+ 6272046366dc11e02cf6da18c8033208             2228 main/binary-amd64/Packages
+ 3f913b3a04e4053f13161b4cb7e1d74e              917 main/binary-amd64/Packages.gz
 SHA1:
- b37f91049a9298680e28b75aec8e55878b5c8a87              157 Release
- 22634e5e7fdf935192d2d198a8b513799e6e85f1             1484 main/binary-amd64/Packages
- 513d98e6b6a80172647af289f54faab014e021ec              728 main/binary-amd64/Packages.gz
+ d30017d3c78b5b9793d7834ab12b3aa6eafc88c6              157 Release
+ 031279eec77b3cb86cc9b28ca81ca55140f7a14e             2228 main/binary-amd64/Packages
+ 77e2935efa5517525d7d891f09845cc8201621aa              917 main/binary-amd64/Packages.gz
 SHA256:
- 44de6e8a6aa70376f7cca135e4583c74ea9b97734687b9e5029844a02bd2dbd8              157 Release
- 9cf110a6d46ad44c45d52a13426b931855531edb4394792b8c4c2f79f1d9dd0c             1484 main/binary-amd64/Packages
- 692a5a281bfcc71874a51f69f32831c8de28ef2772b9571cfa4b6293e69fb70e              728 main/binary-amd64/Packages.gz
+ 576056ceee22ab975b84439ebaa0bfba79a7bea372b4235ca5d1b9d00a4aa75f              157 Release
+ 493a3dc3bd4418427daa2fc467d489c7ef654ce7d20dd81c5edb4fe1f2771d1c             2228 main/binary-amd64/Packages
+ e55984921bb5b639d927b1fd508dd96cbf617f5642c886f68cb6221e9599f082              917 main/binary-amd64/Packages.gz
 SHA512:
- 005d74e9c42c77cedd206fe7d9b40b9f38991691c249d88c3b9f60ff4bffef620c6bb9d76838feeed9cb482ae387bd3a8cf9735e8db6947efe7927a5a0cf3ade              157 Release
- c4f154bcfa807e57af5f82b1d9ea78065e5ae86a676861eeaeb484dafe0e170d892caa6cdb18d3808d2c14678c328909f088e66e36fa575bbf6daefb1742cece             1484 main/binary-amd64/Packages
- e35e28656098ff47b122b964c774f3e48049cd2b956f8714332aeeadec3db5f1b91663c09e64b8075343a75795c57ed20956204a243273cd8936a1197d0b58b2              728 main/binary-amd64/Packages.gz
+ 586bfa7102fa868e698455f489af47ab679b91147af2c66d7e3fe6c0f30bc7804cb3105462b59951f7863a9970c7cff981d8dc63ff133c8c972b7b0fb214f7ef              157 Release
+ 9fffdf7443a2423de70b897c166910dfdc333380a6d3f741448c6f18f2519b11a5a33419eb9b22239320ad68b502463709a4f80fec162e2e0a1db542470be396             2228 main/binary-amd64/Packages
+ a34595cf97c7ed90da12d040228a68f1ca1d7cf204aaa6b0c2df2ec95d7fe05f74a211919c7c34691f6e7b0493d178a460ccbacb2b33959e581baaf3991ddcfd              917 main/binary-amd64/Packages.gz
 -----BEGIN PGP SIGNATURE-----
 
-iQGzBAEBCgAdFiEEb0yJQ7Hv9BQHcRh2d3X5zCwM5vwFAmrqQbkACgkQd3X5zCwM
-5vwqHQv9EabG7A427jBs4bxJSQxm02H9uVhDua5bMi50LWRCMLWvYAuA6Uw7mWri
-GBLdriUznnkuvOMZyAgxAkf7lSkCj9xy79uFsZ3cQdvVjlJeQbNWbAD1iqnbMj+k
-CHQn5DIpDEmkKnl76xWwOjqRL+rBfFl5NsOQ6OaX+P7iDk4x0IBTNAIg4Z53nxzb
-vyLFCADCAY98y3wVRDaE/owWSXJ4id7PXO9ZeaLI+Dxb/aLjgdjiGG3Lm/U5MG5a
-5rnaa//Nbun/as3il5oYW2Cae3iNEfnb+S92A45/3q72C2192b4tjIsHBk0yOgy4
-CccMksEpmhbnYCw5xy2j7ixCIN1D6M8heWvNGOXVNI4BUmkZZ3EUr7c6EBBBiZin
-nMg2bLBoZu18VuFZN94a5xY56NxLepV9sjUG8WjkOfXsz2PYBUn1IG++Lb61xoUd
-s089TEmfpKOMhuDoSqV0gGoZ2GZ264wqyATPeNoFCsQQI6ot02m9jOTp1lZ6qRPP
-R6aBLUEc
-=UkYq
+iHUEARYKAB0WIQQC8OkrBdgDWxr41DAg/q1mu4PmjAUCaupJrwAKCRAg/q1mu4Pm
+jKPwAP9A4OKG+PHrn0N/esnToI5xVte+4o7TBrGWBq6WdUnvfAD9F+hMM4pnvN1e
+gNWIpvv/eMCdq5moOHMVn0TqPc4L1wQ=
+=gRWA
 -----END PGP SIGNATURE-----
