@@ -119,11 +119,20 @@ jobs:
       - name: Publish APT repository
         env:
           APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+          APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
         run: |
           set -euo pipefail
           if [ -z "${APT_GPG_PRIVATE_KEY}" ]; then
             echo "::error::Repository secret APT_GPG_PRIVATE_KEY is not set. Add it (armored GPG private key of the APT repo signing key), then re-run."
             exit 1
+          fi
+
+          if [ -n "${APT_GPG_PASSPHRASE}" ]; then
+            echo "Signing key is passphrase-protected (APT_GPG_PASSPHRASE is set)"
+            SIGN_ARGS=(--pinentry-mode loopback --passphrase "${APT_GPG_PASSPHRASE}")
+          else
+            echo "Signing key is unprotected (APT_GPG_PASSPHRASE is not set)"
+            SIGN_ARGS=()
           fi
 
           sudo apt-get install -y -qq apt-utils
@@ -156,8 +165,8 @@ jobs:
             -o APT::FTPArchive::Release::Components="main" \
             -o APT::FTPArchive::Release::Description="OpsBox APT Repository" \
             release . > Release
-          gpg --batch --yes --clearsign --output InRelease Release
-          gpg --batch --yes --armor --detach-sign --output Release.gpg Release
+          gpg --batch --yes "${SIGN_ARGS[@]}" --clearsign --output InRelease Release
+          gpg --batch --yes "${SIGN_ARGS[@]}" --armor --detach-sign --output Release.gpg Release
 
           cd ../..
           mv ../KEY.asc .
