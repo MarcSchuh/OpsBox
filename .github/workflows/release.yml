@@ -10,6 +10,13 @@ env:
   PYTHON_VERSION: "3.12"
   UV_VERSION: "0.3.0"
 
+# Serialize release runs: concurrent runs race on the gh-pages push
+# (the loser is rejected with 'fetch first'). Queued runs re-clone
+# gh-pages after the previous run finished, so the push is clean.
+concurrency:
+  group: apt-repository-release
+  cancel-in-progress: false
+
 jobs:
   build-and-release:
     runs-on: ubuntu-24.04
