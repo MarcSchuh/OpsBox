@@ -209,7 +209,11 @@ jobs:
           fi
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        # v3.0.1 pinned by SHA. v1 uploaded assets in parallel without
+        # retries and failed the whole step on a single 404 (softprops#369);
+        # v3.0.2+ regressed on uploads to *existing* releases (softprops#836),
+        # which is this workflow's normal case, so stay on v3.0.1.
+        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3.0.1
         with:
           tag_name: ${{ steps.create-tag.outputs.tag }}
           name: Release ${{ steps.create-tag.outputs.tag }}
@@ -243,3 +247,6 @@ jobs:
             dist/opsbox_*_amd64.deb
           draft: false
           prerelease: false
+          # Fail loudly if a dist/ file or the deb glob matches nothing,
+          # instead of silently releasing an incomplete asset set.
+          fail_on_unmatched_files: true
