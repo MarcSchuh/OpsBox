@@ -1,23 +1,23 @@
 Architectures: amd64
 Codename: stable
 Components: main
-Date: Wed, 04 Nov 2026 11:04:27 +0000
+Date: Sun, 15 Nov 2026 10:38:02 +0000
 Description: OpsBox APT Repository
 Origin: OpsBox
 Suite: stable
 MD5Sum:
- 8a2850ec124c768ddec293b742d5ba44              157 Release
- 285b5403ce2a24d0d8d3c1e01f5a2be1             2228 main/binary-amd64/Packages
- b61a44d5d802550b1e386b9548148c17              917 main/binary-amd64/Packages.gz
+ 2eb50eb86930566e19bfe9fd52996b6a              157 Release
+ ad96968e7a9e125e13f32507176f5f9b             2972 main/binary-amd64/Packages
+ a2318880275ac45c6d9a3cc8570bc2e3             1103 main/binary-amd64/Packages.gz
 SHA1:
- 9b701bc6f4821dba2a8056cd47787a7d151f4c9c              157 Release
- 7b6b2f5575d51a25f60f6926fc48467e248ae856             2228 main/binary-amd64/Packages
- 0d2b7a93a6b2404a8f0ba4ecce9caf2380438586              917 main/binary-amd64/Packages.gz
+ 112d7116dd2635b746086185062f69de10dadfcf              157 Release
+ 628646207873289d493a00fbe46b5d6e4abe4982             2972 main/binary-amd64/Packages
+ 59d2b8fbf3e1f389a885618c926a297325c6034c             1103 main/binary-amd64/Packages.gz
 SHA256:
- 720d7abf8220ebe6836c5300172249fba4305dbf41516fb74c19aa2ca49470be              157 Release
- 4409aaa6b6d0dd2dd87831ea1844dae1da94406589b1ae3b0e7fa29d22e11816             2228 main/binary-amd64/Packages
- 17fe46ef27ca19eedec16f230e918549e46041a21c5c7e75f246102ae547179a              917 main/binary-amd64/Packages.gz
+ 4c85f826c53d38b992510237878d3bded9d04f73602f29c8ca0dc1ff9e252c88              157 Release
+ 4a8ee96cfe396aa22cd14042ebfa76e36acd49d3ca89b687e25a600fafb2e9d2             2972 main/binary-amd64/Packages
+ b336acc090716b394fecaf55ecd0496811974b1d8fe6cd791ac8664fe0dbf6b5             1103 main/binary-amd64/Packages.gz
 SHA512:
- 86a1ace7af5f2de576931dbbc5102f81f5bcfcfd0c9b966e1df38c3c95f8f4758b6ae630bde2e523a9d72b42b4b0fdc2df35d50383395d398f0abf57f36a5aed              157 Release
- 0a9abd5932dfa2d8020cdc986396cf0439c25aceec137d7121aed71391ff7e10ccc817ff301fa6a3ceeb01f9fe442a1fe04e26fc5ce2df5031c6bcddca10d6d6             2228 main/binary-amd64/Packages
- a29a3f8fb117c99e67e194eeb0e15d5e9dfbfe0451608b665a94af9814d1707d215741d30694ff78fbaaaec7187ae582ee8025d6280bd700e5210382fe00134b              917 main/binary-amd64/Packages.gz
+ 35b1643f6ceb25b5a9c49590597794b463e42694b7c622a0c04828b2a41fa59d2253f7b9f342a601c72bf5e4a343d36df6a990a36d74727599a35cc7bd35628b              157 Release
+ e4d1df64fc652c59e93ea427a753b49f4f46999757f4cb9229c82801cab08db87ea0e61e20752a42cdf47c5862c42152df42516b9f04d57269d0d301ec729ebe             2972 main/binary-amd64/Packages
+ ca561eccbc42646bfee7d6455c74fa8de5715e05bc96ad5e269f52ad8a56014b434e9240e2ea19db8c95c703549496466cf9d95239337741cacfdbaa7fe6bcd5             1103 main/binary-amd64/Packages.gz
