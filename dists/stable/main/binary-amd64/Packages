@@ -23,11 +23,11 @@ Section: utils
 Maintainer: MarcSchuh <MarcSchuh@users.noreply.github.com>
 Installed-Size: 80736
 Filename: pool/main/o/opsbox/opsbox_0.7.11_amd64.deb
-Size: 81677384
-MD5sum: f6958f055654e1c73583987f46cae003
-SHA1: 7272dad185412844aed33eb7cc52696982e41fc7
-SHA256: 6ad554a5123ee753b4c81990ec171db5b699f4facf7db69614d50679d28a243a
-SHA512: 4f4c4a7e28c862e489a9decb52bcae29da36f9e8d507581c37fabd24650bddbf627b7d75b4fd537672db8111a20dc6e867462964b1f72c5c3f096824dd8ad81b
+Size: 81678466
+MD5sum: 29f748d31a4c73d685b7f47f2d249d7a
+SHA1: 859fb3b56630fb71e1364924e067ab6bbba39f97
+SHA256: 3cf1b2a851592b3b052e8f8b886700e17769ca42a48f7e837a926f2c0b2c46b7
+SHA512: a7a380335f0e3ec289ea3231f6b2ace3427305994f6f920317ce6cc43ac25b49a0fb253ae363d5347c4fb12d6ddd8e3977c1eb78404c75b5579ac6d808ca0a74
 Description: Collection of server administration tools: notification utility, mail
  checking, database backups, encrypted mail, restic backups, rsync
  management, health monitoring and KVM snapshot management.
