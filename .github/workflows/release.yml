@@ -25,9 +25,16 @@ jobs:
 
     steps:
       - name: Checkout code
+        # RELEASE_BUMP_TOKEN must be a PAT of a user who can bypass the
+        # 'Default' ruleset on main (requires PR + CodeQL for every other
+        # actor). The default GITHUB_TOKEN cannot push the version bump
+        # commit to main - that push was rejected with GH013 and the whole
+        # release failed (run 43591579974). Falls back to GITHUB_TOKEN,
+        # which keeps everything except the bump push working.
         uses: actions/checkout@v4
         with:
           fetch-depth: 0 # Fetch full history for version detection
+          token: ${{ secrets.RELEASE_BUMP_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Set up Python ${{ env.PYTHON_VERSION }}
         uses: actions/setup-python@v4
@@ -60,6 +67,8 @@ jobs:
 
       - name: Determine version (bump patch on dependency updates)
         id: get-version
+        env:
+          RELEASE_BUMP_TOKEN: ${{ secrets.RELEASE_BUMP_TOKEN }}
         run: |
           LOCK_CHANGED=false
           if [ "${{ github.event_name }}" = "push" ] && git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" -- uv.lock | grep -q .; then
@@ -74,6 +83,10 @@ jobs:
           echo "pyproject.toml version: ${VERSION}"
 
           if [ "${LOCK_CHANGED}" = "true" ] && git rev-parse "v${VERSION}" >/dev/null 2>&1; then
+            if [ -z "${RELEASE_BUMP_TOKEN}" ]; then
+              echo "::error::uv.lock changed and v${VERSION} is already released, so a version bump is required - but RELEASE_BUMP_TOKEN is not set. Without it the bump commit cannot be pushed to main (the 'Default' ruleset requires a PR for every actor that cannot bypass). Set RELEASE_BUMP_TOKEN (PAT with 'Contents: Read and write') and re-run."
+              exit 1
+            fi
             IFS='.' read -r MAJ MIN PAT <<< "${VERSION}"
             NEW_VERSION="${MAJ}.${MIN}.$((PAT + 1))"
             sed -i -E "0,/^version\s*=\s*\"[^\"]+\"/s//version = \"${NEW_VERSION}\"/" pyproject.toml
