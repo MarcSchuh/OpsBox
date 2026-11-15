@@ -10,6 +10,20 @@ The CI pipeline consists of three jobs:
 2. **Tests** - Test execution with coverage reporting
 3. **Security** - Security scanning with Bandit and pip-audit
 
+## Version Bumps on Dependency Updates
+
+Pull requests that change `uv.lock` (Dependabot or manual) automatically get
+a PATCH version bump pushed onto the PR branch
+(`.github/workflows/version-bump-on-deps.yml`). The new version therefore
+arrives on `main` through the PR merge itself - the release workflow never
+pushes to the protected `main` branch, so no PAT or bypass is needed.
+
+If a dependency update still lands on `main` without a version bump (the
+bump workflow failed or was skipped, or `uv.lock` was changed outside a pull
+request), the release workflow fails with instructions instead of silently
+re-releasing the current version. Fix: open a PR that bumps the version in
+`pyproject.toml`, merge it, and the release runs automatically.
+
 ## Required Status Checks
 
 Configure these status checks in branch protection rules:

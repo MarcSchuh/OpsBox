@@ -1,0 +1,96 @@
+name: Version Bump on Dependency PRs
+
+# Automatically bumps the PATCH version in pyproject.toml on pull requests
+# that change uv.lock, and pushes the change back into the PR branch. This
+# way the new version reaches main through the PR merge itself and the
+# release workflow never has to push to the protected main branch (the
+# 'Default' ruleset forbids that for every actor that cannot bypass).
+#
+# Why this works without a PAT:
+#   The push targets the PR branch (unprotected), not main, so the default
+#   GITHUB_TOKEN with `permissions: contents: write` is enough. Runs
+#   triggered by Dependabot get a read-only GITHUB_TOKEN by default;
+#   declaring `permissions: contents: write` elevates it for exactly this
+#   push (documented in "Troubleshooting Dependabot on GitHub Actions").
+#   The GITHUB_TOKEN cannot modify .github/workflows files, but the bump
+#   commit only touches pyproject.toml.
+#
+# Why this cannot loop:
+#   Commits pushed with GITHUB_TOKEN do not re-trigger workflows, and the
+#   bump commit only touches pyproject.toml, so the uv.lock paths filter
+#   would keep this workflow from re-running on it anyway.
+#
+# Idempotency: if the PR version already differs from main (bumped by an
+# earlier run or by hand), nothing is pushed.
+#
+# Safety net: if a dependency update still lands on main without a version
+# bump (workflow failed, was skipped, or the lockfile was changed directly),
+# the release workflow fails with instructions instead of silently
+# re-releasing the current version.
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+    paths:
+      - uv.lock
+
+permissions:
+  contents: write
+
+jobs:
+  bump-version:
+    # Fork branches cannot be pushed to with GITHUB_TOKEN; skip them.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          # Check out the PR branch, not the merge ref, so the bump
+          # commit lands on the branch itself.
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Bump PATCH version (idempotent)
+        id: bump
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+
+          extract_version() {
+            grep -E '^version = "' "$1" | head -1 | sed -E 's/version = "([^"]+)"/\1/'
+          }
+
+          HEAD_VERSION="$(extract_version pyproject.toml)"
+          BASE_VERSION="$(git show "origin/${BASE_REF}:pyproject.toml" | grep -E '^version = "' | head -1 | sed -E 's/version = "([^"]+)"/\1/')"
+
+          echo "Base (${BASE_REF}) version: ${BASE_VERSION}"
+          echo "Head version:            ${HEAD_VERSION}"
+
+          # If the head branch already differs from base, the version was
+          # already bumped in this PR (e.g. on an earlier run) -> do nothing.
+          if [ "${HEAD_VERSION}" != "${BASE_VERSION}" ]; then
+            echo "Version already bumped in this PR, skipping."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          IFS='.' read -r MAJ MIN PAT <<< "${HEAD_VERSION}"
+          NEW_VERSION="${MAJ}.${MIN}.$((PAT + 1))"
+          sed -i -E "0,/^version = \"[^\"]+\"/s//version = \"${NEW_VERSION}\"/" pyproject.toml
+
+          echo "Bumped version: ${HEAD_VERSION} -> ${NEW_VERSION}"
+          echo "new_version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and push
+        if: steps.bump.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml
+          git commit -m "chore: bump version to ${{ steps.bump.outputs.new_version }} for dependency update"
+          git push
